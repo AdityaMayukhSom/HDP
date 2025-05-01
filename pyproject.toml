@@ -1,0 +1,13 @@
+[project]
+name = "hallucination-detection-pipeline"
+version = "0.1.0"
+description = "Summarization and classification of abstracts with PG-LLaMA"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "accelerate>=1.6.0",
+    "datasets>=3.5.0",
+    "fastapi[standard]>=0.115.12",
+    "torch==2.5.0",
+    "transformers>=4.51.3",
+]

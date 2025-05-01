@@ -1,6 +1,6 @@
 try:
     import torch
-except:
+except Exception:
     raise ImportError("Install torch via `pip install torch`")
 from packaging.version import Version as V
 
