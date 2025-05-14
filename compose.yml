@@ -1,0 +1,15 @@
+services:
+  httpd-server:
+    image: httpd:2-bookworm
+    container_name: prime-httpd-server
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      # - ./html5up-stellar/:/usr/share/nginx/html
+      - ./httpd.conf:/usr/local/apache2/conf/httpd.conf
+      - ./public/:/usr/local/apache2/htdocs/
+      - /etc/ssl/certs/apache-selfsigned.crt:/usr/local/apache2/conf/server.crt
+      - /etc/ssl/private/apache-selfsigned.key:/usr/local/apache2/conf/server.key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
