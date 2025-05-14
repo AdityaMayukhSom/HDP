@@ -6,3 +6,4 @@
 **/*.parquet
 **/*.arrow
 certs*/
+./public/*
