@@ -2,14 +2,13 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
-from utils.config import Config
-from utils.extractor import LLMModel
-from utils.lifespan import lifespan, mm, tm
-from utils.memory import print_memory_stats
-from utils.summarizer import generate_highlight
-from utils.transfer import (
+from src.config import Config
+from src.extractor import LLMModel
+from src.lifespan import lifespan, mm, tm
+from src.memory import print_memory_stats
+from src.summarizer import generate_highlight
+from src.transfer import (
     ExtractFeaturesRequest,
     ExtractFeaturesResponse,
     GreetingResponse,
@@ -73,16 +72,16 @@ if __name__ == "__main__":
         compresslevel=5,
     )
 
-    app.mount(
-        path="/",
-        app=StaticFiles(
-            directory="public",
-            check_dir=False,
-            follow_symlink=True,
-            html=True,
-        ),
-        name="public",
-    )
+    # app.mount(
+    #     path="/",
+    #     app=StaticFiles(
+    #         directory="public",
+    #         check_dir=False,
+    #         follow_symlink=True,
+    #         html=True,
+    #     ),
+    #     name="public",
+    # )
 
     # ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     # ssl_context.load_cert_chain(

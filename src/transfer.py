@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from .extractor import ExtractedFeatures
+from src.extractor import ExtractedFeatures
 
 
 class SummarizeRequest(BaseModel):

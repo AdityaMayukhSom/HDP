@@ -1,7 +1,7 @@
 import torch
 from unsloth import FastLanguageModel, is_bfloat16_supported
 
-from .config import Config
+from src.config import Config
 
 
 def get_summarizer_model_tokenizer():

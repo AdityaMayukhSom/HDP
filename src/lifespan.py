@@ -3,9 +3,9 @@ from typing import Literal
 
 from fastapi import FastAPI
 
-from utils.extractor import UnslothLLaMA, get_clf_and_std_scaler
-from utils.memory import empty_all_memory, print_memory_stats
-from utils.summarizer import get_summarizer_model_tokenizer
+from src.extractor import UnslothLLaMA, get_clf_and_std_scaler
+from src.memory import empty_all_memory, print_memory_stats
+from src.summarizer import get_summarizer_model_tokenizer
 
 mm = dict[Literal["summarizer", "extractor_llm", "extractor_clf"], any]()
 tm = dict[Literal["summarizer"], any]()
