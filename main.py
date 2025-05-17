@@ -1,60 +1,88 @@
-import ctypes
-import gc
-import sys
-
-import torch
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from utils.summarizer import generate_highlight, get_inference_model_and_tokenizer
-from utils.transfer import GreetingResponse, SummarizeRequest, SummarizeResponse
+from utils.config import Config
+from utils.extractor import LLMModel
+from utils.lifespan import lifespan, mm, tm
+from utils.memory import print_memory_stats
+from utils.summarizer import generate_highlight
+from utils.transfer import (
+    ExtractFeaturesRequest,
+    ExtractFeaturesResponse,
+    GreetingResponse,
+    SummarizeRequest,
+    SummarizeResponse,
+)
 
-IS_DEBUG = True
-APP_PORT = 5000
-
-app = FastAPI(root_path="/api", debug=IS_DEBUG, redirect_slashes=True)
-
-
-@app.get("/greet/{name}", response_class=JSONResponse)
-def greet_user(name: str):
-    if name is None or len(name) == 0:
-        name = "Stranger"
-    return GreetingResponse(message=f"Hello {name.title()} From FastAPI...")
-
-
-@app.post("/summarize", response_class=JSONResponse)
-def summarize(request: SummarizeRequest):
-    libc = ctypes.CDLL("libc.so.6")  # clearing cache
-
-    libc.malloc_trim(0)
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    model, tokenizer = get_inference_model_and_tokenizer()
-    highlight = generate_highlight(request.abstract, model, tokenizer)
-
-    del model, tokenizer
-
-    torch.cuda.empty_cache()
-    gc.collect()
-    libc.malloc_trim(0)
-
-    return SummarizeResponse(highlight=highlight)
-
-
-app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
-
-app.mount(
-    "/",
-    StaticFiles(directory="public", check_dir=False, follow_symlink=True, html=True),
-    name="public",
+app = FastAPI(
+    root_path="/api",
+    debug=Config.IS_DEBUG,
+    redirect_slashes=True,
+    lifespan=lifespan,
 )
 
 
-def main(argv: list[str]):
+@app.get("/greet/{name}", response_class=JSONResponse)
+def greet_user(name: str) -> GreetingResponse:
+    if name is None or len(name) == 0:
+        name = "Stranger"
+    return GreetingResponse(
+        message=f"Hello {name.title()} From FastAPI...",
+    )
+
+
+@app.post("/extract/features", response_class=JSONResponse)
+def calculate_evaluate_features(
+    request: ExtractFeaturesRequest,
+) -> ExtractFeaturesResponse:
+    model: LLMModel = mm["extractor_llm"]
+
+    features = model.extract_features(
+        knowledge="",
+        document=request.abstract,
+        generated_text=request.highlight,
+    )
+    del model
+
+    clf = mm["extractor_clf"]
+
+    return ExtractFeaturesResponse(features=features)
+
+
+@app.post("/summarize", response_class=JSONResponse)
+def summarize(request: SummarizeRequest) -> SummarizeResponse:
+    print_memory_stats()
+
+    highlight = generate_highlight(
+        request.abstract,
+        mm["summarizer"],
+        tm["summarizer"],
+    )
+
+    print_memory_stats()
+    return SummarizeResponse(highlight=highlight)
+
+
+if __name__ == "__main__":
+    app.add_middleware(
+        GZipMiddleware,
+        minimum_size=1000,
+        compresslevel=5,
+    )
+
+    app.mount(
+        path="/",
+        app=StaticFiles(
+            directory="public",
+            check_dir=False,
+            follow_symlink=True,
+            html=True,
+        ),
+        name="public",
+    )
     # ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     # ssl_context.load_cert_chain(
     #     certfile="/etc/ssl/certs/apache-selfsigned.crt",
@@ -64,13 +92,9 @@ def main(argv: list[str]):
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=APP_PORT,
-        log_level="debug",
-        reload=IS_DEBUG,
+        port=Config.APP_PORT,
+        log_level=Config.LOG_LEVEL,
+        reload=Config.IS_DEBUG,
         use_colors=True,
         # ssl=ssl_context,
     )
-
-
-if __name__ == "__main__":
-    main(sys.argv)

@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from .extractor import ExtractedFeatures
+
 
 class SummarizeRequest(BaseModel):
     abstract: str
@@ -11,3 +13,12 @@ class SummarizeResponse(BaseModel):
 
 class GreetingResponse(BaseModel):
     message: str
+
+
+class ExtractFeaturesRequest(BaseModel):
+    abstract: str
+    highlight: str
+
+
+class ExtractFeaturesResponse(BaseModel):
+    features: ExtractedFeatures

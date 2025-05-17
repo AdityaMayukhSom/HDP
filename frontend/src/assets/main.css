@@ -1,0 +1,33 @@
+@import url("https://fonts.googleapis.com/css2?family=Host+Grotesk:ital,wght@0,300..800;1,300..800&display=swap");
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --text: #100e09;
+    --background: #f8f6f2;
+    --primary: #584b32;
+    --secondary: #91c190;
+    --accent: #5aa077;
+  }
+  .dark {
+    --text: #f5f2ed;
+    --background: #0d0b07;
+    --primary: #cdc0a6;
+    --secondary: #3f6e3e;
+    --accent: #5ea47b;
+  }
+}
+
+@theme inline {
+  --font-host-grotesk: "Host Grotesk", sans-serif;
+  --color-text: var(--text);
+  --color-background: var(--background);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+}
+
+* {
+  @apply font-host-grotesk;
+  font-optical-sizing: auto;
+}

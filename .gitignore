@@ -9,3 +9,4 @@ certs*/
 ./public/*
 **/.env
 **/unsloth_compiled_cache/
+data/**
