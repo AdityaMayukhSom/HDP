@@ -17,6 +17,11 @@ dependencies = [
     "psutil>=7.0.0",
     "setuptools>=80.4.0",
     "python-dotenv>=1.1.0",
+    "tabulate>=0.9.0",
+    "scikit-learn>=1.6.1",
+    "seaborn>=0.13.2",
+    "matplotlib>=3.10.3",
+    "xgboost>=3.0.1",
 ]
 
 [project.optional-dependencies]
@@ -30,3 +35,8 @@ torchvision = [{ index = "pytorch-cu121" }]
 name = "pytorch-cu121"
 url = "https://download.pytorch.org/whl/cu121"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.1.1",
+]

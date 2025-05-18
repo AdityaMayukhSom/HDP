@@ -1,10 +1,9 @@
-import pickle
-
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from pydantic import BaseModel
-from unsloth import FastLanguageModel
+from unsloth import FastLanguageModel, is_bfloat16_supported
+
+from src.config import Config
 
 
 class ExtractedFeatures(BaseModel):
@@ -14,48 +13,9 @@ class ExtractedFeatures(BaseModel):
     MMDVP: float
 
 
-class SimpleDenseNet(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim=1, dropout_prob=0.4):
-        super(SimpleDenseNet, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.tanh = nn.Tanh()
-        # self.fc2 = nn.Linear(hidden_dim, output_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc4 = nn.Linear(hidden_dim, output_dim)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.tanh(x)
-        x = self.fc2(x)
-        x = self.tanh(x)
-        x = self.fc3(x)
-        x = self.tanh(x)
-        x = self.fc4(x)
-        x = self.sigmoid(x)
-        return x
-
-
-def get_clf_and_std_scaler():
-    with open("../data/extractor/standard-scaler.pkl", "rb") as std_file:
-        std = pickle.load(std_file)
-
-    clf = SimpleDenseNet()
-    clf.load_state_dict(
-        torch.load(
-            "../data/extractor/simple-dense-net.pt",
-            weights_only=True,
-        )
-    )
-    clf.eval()
-
-    return clf, std
-
-
 class LLMModel:
     def __init__(self, model_name, model, tokenizer):
-        self.__device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.__device = Config.DEVICE
         self.__model_name = model_name
         self.__model = model
         self.__tokenizer = tokenizer
@@ -179,10 +139,15 @@ class LLMModel:
 class UnslothLLaMA(LLMModel):
     def __init__(self):
         model_name = "unsloth/Llama-3.2-1B-Instruct-bnb-4bit"
+
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=model_name,
             max_seq_length=2048,
             load_in_4bit=True,
-            dtype=None,
+            dtype=torch.bfloat16 if is_bfloat16_supported() else torch.float16,
+            use_cache=True,
+            device_map=Config.DEVICE,
+            low_cpu_mem_usage=True,
         )
+
         super().__init__(model_name, model, tokenizer)

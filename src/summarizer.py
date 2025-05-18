@@ -10,6 +10,9 @@ def get_summarizer_model_tokenizer():
         max_seq_length=2048,
         load_in_4bit=True,
         dtype=torch.bfloat16 if is_bfloat16_supported() else torch.float16,
+        use_cache=True,
+        device_map=Config.DEVICE,
+        low_cpu_mem_usage=True,
     )
 
     FastLanguageModel.for_inference(model)
@@ -17,8 +20,7 @@ def get_summarizer_model_tokenizer():
 
 
 def generate_highlight(abstract: str, model, tokenizer):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    device = torch.device(device)
+    device = torch.device(Config.DEVICE)
 
     init_identifier = "<|start_header_id|>assistant<|end_header_id|>"
     term_identifier = "<|eot_id|>"

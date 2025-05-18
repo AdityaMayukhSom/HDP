@@ -3,20 +3,28 @@ import gc
 
 import psutil
 import torch
+from tabulate import tabulate
 
 
 def print_memory_stats():
-    gb = 2**30
+    gb = 1 << 30
     stats = psutil.virtual_memory()
-    free_gb = stats.free / gb
-    print(f"Your runtime has {free_gb:.1f} gigabytes of free RAM")
-    used_gb = stats.used / gb
-    print(f"Your runtime has {used_gb:.1f} gigabytes of used RAM")
-    avlb_gb = stats.available / gb
-    print(f"Your runtime has {avlb_gb:.1f} gigabytes of available RAM")
-    ram_gb = stats.total / gb
-    print(f"Your runtime has {ram_gb:.1f} gigabytes of total RAM")
-    print(f"Your runtime has {stats.percent:.1f}% usage of RAM")
+
+    data = [
+        ["Total", f"{stats.total / gb:.2f} GB"],
+        ["Available", f"{stats.available / gb:.2f} GB"],
+        ["Used", f"{stats.used / gb:.2f} GB"],
+        ["Free", f"{stats.free / gb:.2f} GB"],
+        ["Percent Used", f"{stats.percent:.1f}%"],
+    ]
+
+    mem_table = tabulate(
+        data,
+        headers=["Metric", "Value"],
+        tablefmt="psql",
+    )
+
+    print(mem_table)
 
 
 def empty_all_memory():

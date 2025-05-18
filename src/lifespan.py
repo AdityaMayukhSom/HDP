@@ -3,7 +3,8 @@ from typing import Literal
 
 from fastapi import FastAPI
 
-from src.extractor import UnslothLLaMA, get_clf_and_std_scaler
+from src.dense_net import get_clf_and_std_scaler
+from src.extractor import UnslothLLaMA
 from src.memory import empty_all_memory, print_memory_stats
 from src.summarizer import get_summarizer_model_tokenizer
 
@@ -14,7 +15,6 @@ ss = dict[Literal["extractor_clf"], any]()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print_memory_stats()
     empty_all_memory()
 
     mm["summarizer"], tm["summarizer"] = get_summarizer_model_tokenizer()
@@ -25,12 +25,11 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    print_memory_stats()
-
     # extractor model will be moved to cpu when the model will be garbage collected
     # hence we only need to move the summarizer model to cpu before gc call
     mm["summarizer"].to("cpu")
 
+    # print the memory after moving all the models to cpu
     print_memory_stats()
 
     del mm["summarizer"]
