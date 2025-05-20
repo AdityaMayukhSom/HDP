@@ -8,4 +8,5 @@ certs*/
 ./public/*
 **/.env
 **/unsloth_compiled_cache/
-data/**
+data/*
+**/node_moduless

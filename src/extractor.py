@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from pydantic import BaseModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from unsloth import FastLanguageModel, is_bfloat16_supported
 
 from src.config import Config
@@ -136,6 +137,25 @@ class LLMModel:
         )
 
 
+class LLama(LLMModel):
+    def __init__(self):
+        model_name = "meta-llama/Llama-2-7b-chat-hf"
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        super().__init__(model_name, model, tokenizer)
+
+    def generate(self, inpt):
+        inputs = self.tokenizer(
+            [inpt], max_length=1024, return_tensors="pt", truncation=True
+        )
+        summary_ids = self.model.generate(inputs["input_ids"])
+        summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+        return summary
+
+
 class UnslothLLaMA(LLMModel):
     def __init__(self):
         model_name = "unsloth/Llama-3.2-1B-Instruct-bnb-4bit"
@@ -151,3 +171,29 @@ class UnslothLLaMA(LLMModel):
         )
 
         super().__init__(model_name, model, tokenizer)
+
+    def generate(self, inpt):
+        # put print statements in the LLaMA model generate function, to compare if LLaMA and Unsloth
+        # LLaMA are giving interoperable inputs and outputs. tokenized input's won't make much sense
+        # so rather print the summary on both the models for some given input, and compare if those
+        # are semantically equivalent.
+
+        model_inputs = self.tokenizer(
+            inpt, return_tensors="pt", padding=True, truncation=True
+        ).to(Config.DEVICE)
+        model_outputs = self.model.generate(
+            **model_inputs, max_new_tokens=2048, num_return_sequences=1
+        )
+
+        # TODO: is decoding model_output and taking decoded_text[0] same as decoding model_output[0]?
+        # if yes, that can save a lot of compute, so need to test that once, easiest way to test is to
+        # print decoded_text[0] and decode(model_outputs[0]) and check if those are equal.
+
+        # OPTION - 01
+        # decoded_text = self.tokenizer.batch_decode(model_outputs, skip_special_tokens=True)
+        # summary = decoded_text[0]
+
+        # OPTION - 02
+        summary = self.tokenizer.decode(model_outputs[0], skip_special_token=True)
+
+        return summary
