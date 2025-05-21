@@ -3,7 +3,7 @@ from typing import Literal
 
 from fastapi import FastAPI
 
-from src.dense_net import get_clf_and_std_scaler
+# from src.dense_net import get_clf_and_std_scaler
 from src.extractor import UnslothLLaMA
 from src.memory import empty_all_memory, print_memory_stats
 from src.summarizer import get_summarizer_model_tokenizer
@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
 
     mm["summarizer"], tm["summarizer"] = get_summarizer_model_tokenizer()
     mm["extractor_llm"] = UnslothLLaMA()
-    mm["extractor_clf"], ss["extractor_clf"] = get_clf_and_std_scaler()
+    # mm["extractor_clf"], ss["extractor_clf"] = get_clf_and_std_scaler()
 
     print_memory_stats()
 

@@ -1,0 +1,3 @@
+[submodule "EntFA"]
+	path = EntFA
+	url = git@github.com:AdityaMayukhSom/EntFA.git

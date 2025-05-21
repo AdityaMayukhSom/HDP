@@ -1,8 +1,9 @@
 import torch
 import torch.nn.functional as F
 from pydantic import BaseModel
+
+from unsloth import FastLanguageModel, is_bfloat16_supported  # isort:skip
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from unsloth import FastLanguageModel, is_bfloat16_supported
 
 from src.config import Config
 
