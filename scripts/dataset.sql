@@ -40,3 +40,39 @@ FROM
    WHERE "Abstract" NOT LIKE '%.'
      AND "Split" = 'TRAIN'
    LIMIT 100) AS "SUB";
+
+
+ALTER TABLE "MixSub" ADD COLUMN "BetterHighlight" TEXT;
+
+
+ALTER TABLE "MixSub" ADD COLUMN "BetterAbstract" TEXT;
+
+
+SELECT *
+FROM "MixSub"
+LIMIT 10;
+
+
+SELECT COUNT(*) AS "TODO"
+FROM "MixSub"
+WHERE "Abstract" NOT LIKE '%.'
+  AND "BetterHighlight" IS NULL;
+
+
+UPDATE "MixSub"
+SET "BetterHighlight" = "",
+    "BetterAbstract" = ""
+WHERE "Filename" = "";
+
+
+SELECT COUNT(DISTINCT "Filename")
+FROM "MixSub"
+WHERE "Abstract" NOT LIKE '%.'
+  AND COALESCE(TRIM("BetterHighlight"), '') <> '';
+
+UPDATE "MixSub" SET "BetterAbstract" = NULL, "BetterHighlight" = NULL
+WHERE "Filename" IN (
+  'S0308814620309730','S0034425720304776','S0034425720304879','S0034528818315327',
+  'S0034528819305090','S0034528819305958','S0034528819306691','S0034528819307003',
+  'S0034528819303108','S0034528819303285','S0034528819304667','S003452881930488'
+);

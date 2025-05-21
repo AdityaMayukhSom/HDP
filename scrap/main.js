@@ -1,8 +1,7 @@
 const puppeteer = require("puppeteer");
-const { Client, Pool, Query } = require("pg");
 const dotenv = require("dotenv");
-const fs = require("fs");
 const winston = require("winston");
+const { Pool } = require("pg");
 
 // @ts-ignore
 const logger = winston.createLogger({
@@ -12,7 +11,7 @@ const logger = winston.createLogger({
     //   (i.e., error, fatal, but not other levels)
     //
     new winston.transports.File({
-      filename: "error-outputs.log",
+      // filename: "error-outputs.log",
       level: "error",
       dirname: "log",
     }),
@@ -21,88 +20,83 @@ const logger = winston.createLogger({
     //   (i.e., fatal, error, warn, and info, but not trace)
     //
     new winston.transports.File({
-      filename: "combined-outputs.log",
+      // filename: "combined-outputs.log",
       dirname: "log",
     }),
     new winston.transports.Console({
-      format: winston.format.simple(),
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
     }),
   ],
 });
 
 /**
- * @param {string} filename
  * @param {puppeteer.Page} page
  */
-const processPage = (filename, page) => {
+const processPage = (page) => {
   return page.$eval("#abstracts", (container) => {
-    /**
-     * @param {Element | ChildNode | null} node
-     */
-    const nodeHasText = (node) => {
-      return (
-        node instanceof HTMLDivElement ||
-        node instanceof HTMLParagraphElement ||
-        node instanceof HTMLSpanElement ||
-        node instanceof HTMLLIElement ||
-        node instanceof HTMLDataElement ||
-        node instanceof HTMLDListElement ||
-        node instanceof HTMLDataListElement
-      );
-    };
-
-    /**
-     * @param {Element | null} parentNode
-     */
-    function removeHeadingChildren(parentNode) {
-      if (!parentNode) {
-        logger.warn("Parent node not found.");
-        return;
-      }
-
-      const headingTags = ["H1", "H2", "H3", "H4", "H5", "H6"]; // Uppercase for nodeName comparison
-
-      // Collect children to remove first, as removing elements during iteration
-      // can mess up the NodeList's indices.
-      const childrenToRemove = [];
-      for (let i = 0; i < parentNode.children.length; i++) {
-        const child = parentNode.children[i];
-        if (headingTags.includes(child.nodeName)) {
-          // nodeName is always uppercase
-          childrenToRemove.push(child);
-        }
-      }
-
-      // Now remove them
-      childrenToRemove.forEach((child) => {
-        parentNode.removeChild(child);
-      });
-
-      // console.log("All heading childs removed from:", parentNode);
-    }
-
     // Fetch the sub-elements from the previously fetched container element
     // Get the displayed text and return it (`.innerText`)
-    const highlightNodeList =
-      container?.querySelector(".author-highlights")?.querySelectorAll(
-        `
-          .react-xocs-list-item *:not(.list-label), 
-          .list *:not(.list-label)
-          `
-      ) || [];
+    const hlRoot = container?.querySelector(".author-highlights .list");
 
-    const highlight = [...highlightNodeList]
-      .filter(nodeHasText)
-      .map((n) => n.innerText)
-      .map((h) => {
-        h = h
-          .trim()
-          .replaceAll("•", "")
-          .replaceAll("\n", "")
-          .replaceAll(/[^\x00-\x7F]/g, "");
-        return h.endsWith(".") ? h : h + ".";
-      })
-      .join(" ");
+    // const hlSel = [
+    //   `.list .react-xocs-list-item .list-contents`,
+    //   `.list .react-xocs-list-item *:not(.list-label)`,
+    //   `.list .react-xocs-list-item`,
+    //   `.list`,
+    // ];
+
+    let highlight = "";
+    if (hlRoot instanceof HTMLElement) {
+      highlight = hlRoot.innerText
+        .trim()
+        .replaceAll("•", ". ")
+        .replaceAll("\n", "");
+
+      if (highlight.startsWith(".")) {
+        highlight = highlight.slice(1) + ".";
+      }
+
+      highlight = highlight.replace(/\.(\s|\.)*\./g, ". ").trim();
+    }
+
+    // let highlightNodeList = [];
+    // for (const sel of hlSel) {
+    //   let tmpHlList = hlRoot?.querySelectorAll(sel);
+    //   if (tmpHlList !== undefined && tmpHlList.length > 0) {
+    //     // @ts-ignore
+    //     highlightNodeList = tmpHlList;
+    //     break;
+    //   }
+    // }
+
+    // let highlight =
+    //   highlightNodeList.length > 0
+    //     ? [...highlightNodeList]
+    //         .filter((n) => n instanceof HTMLElement)
+    //         .map((n) => n.innerText)
+    //         .map((h) => {
+    //           h = h
+    //             .trim()
+    //             .replaceAll("•", ".")
+    //             .replaceAll("\n", "")
+    //             .replaceAll(/[^\x00-\x7F]/g, "");
+    //           return h.endsWith(".") ? h : h + ".";
+    //         })
+    //         .join(" ")
+    //     : hlRoot instanceof HTMLElement
+    //       ? hlRoot.innerText.trim().replaceAll("•", "").replaceAll("\n", "")
+    //       : "";
+
+    // if (highlightNodeList.length > 0) {
+    //   if (highlight.startsWith("Highlights")) {
+    //     highlight = highlight.replace("Highlights", "");
+    //   }
+
+    //   highlight = highlight.replaceAll("\n", "");
+    // }
 
     // const abstractNodeList =
     //   container?.querySelector(".abstract")?.querySelectorAll('[id^="spar"]') ||
@@ -113,21 +107,30 @@ const processPage = (filename, page) => {
     //   .map((n) => n.innerText)
     //   .join(" ");
 
-    const abstractContainer = container?.querySelector(".author");
-    removeHeadingChildren(abstractContainer);
+    let abstract = "";
+    const absRoot = container?.querySelector(".author");
 
+    if (absRoot instanceof HTMLElement) {
+      const headingChildren = absRoot.querySelectorAll(
+        ".section-title, h1, h2, h3"
+      );
+
+      for (const children of headingChildren) {
+        children.parentNode?.removeChild(children);
+      }
+
+      abstract = absRoot.innerText
+        // .replaceAll(/[^\x00-\x7F]/g, "")
+        .replaceAll(/[\uFFFD]|\p{C}/gu, "")
+        .trim();
+    }
     // const highlightContainer = container?.querySelector(".author-highlights");
 
     // const highlight = nodeHasText(highlightContainer)
     // ? highlightContainer.innerText
     // : null;
 
-    const abstract = (
-      nodeHasText(abstractContainer) ? abstractContainer.innerText : ""
-    ).replace(/[^\x00-\x7F]/g, "");
-
     return {
-      filename,
       highlight,
       abstract,
     };
@@ -173,7 +176,13 @@ const run = async (filenames, browser) => {
     page.setRequestInterception(true);
 
     page.on("request", (request) => {
-      if (request.resourceType() === "script") request.abort();
+      if (
+        request.resourceType() === "script" ||
+        request.resourceType() === "font" ||
+        request.resourceType() === "stylesheet" ||
+        request.resourceType() === "image"
+      )
+        request.abort();
       else request.continue();
     });
 
@@ -200,20 +209,38 @@ const run = async (filenames, browser) => {
       // });
 
       const errorExists = await page
-        .$eval("#errorBorder #error", (el) => el !== null)
+        .$eval("#errorBorder #error, .error-card", (el) => el !== null)
         .catch((e) => {
           // This catch block handles the case where the selector #errorBorder #error is not found at all
           // or any other error during the $eval.
           // If the selector is not found, $eval throws. We want to treat this as "no error element found".
           logger.info(
-            `Error element not found on page for file ${filename}, proceeding normally.`
+            `no error element not found on page for file ${filename}, proceeding normally.`
           );
           return false; // No error element found
         });
 
-      let waitTime = 5000;
+      const noHighlight = await page
+        .$eval("#abstracts .author-highlights .list", (el) => el === null)
+        .catch((e) => {
+          logger.error(
+            `No highlight exists ${filename}, will go to science direct..`
+          );
+          return true; // No error element found
+        });
 
-      if (errorExists) {
+      const noAbstract = await page
+        .$eval("#abstracts .author", (el) => el === null)
+        .catch((e) => {
+          logger.error(
+            `No abstract exists ${filename}, will go to science direct..`
+          );
+          return true; // No error element found
+        });
+
+      let waitTime = 4000;
+
+      if (errorExists || noHighlight || noAbstract) {
         logger.error(
           `Error detected on the initial page for file ${filename}. Navigating to fallback page.`
         );
@@ -227,19 +254,19 @@ const run = async (filenames, browser) => {
         //   timeout: 2000,
         // });
 
-        waitTime = 15000;
+        waitTime = 6000;
       }
 
       try {
-        const point = await processPage(filename, page);
+        const point = await processPage(page);
         // logger.info(JSON.stringify(point, null, 4));
-        data.push(point);
+        data.push({ ...point, filename });
       } catch (e) {
         logger.error(`error while processing page for filename ${filename}`, e);
         data.push({ filename: filename, abstract: null, highlight: null });
       }
 
-      await new Promise((r) => setTimeout(r, waitTime + Math.random() * 2000));
+      await new Promise((r) => setTimeout(r, waitTime + Math.random() * 3000));
     }
 
     return data;
@@ -254,6 +281,12 @@ const main = async () => {
     path: ["../.env"],
   });
 
+  const getIndianTime = () => {
+    return new Date().toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+    });
+  };
+
   try {
     logger.info("Connecting to Browser API...");
 
@@ -264,17 +297,18 @@ const main = async () => {
       // browserWSEndpoint: BROWSER_WS,
     });
 
-    const d = await run(
-      [
-        "S0003347220301986",
-        "S0003347220300270",
-        "S000334722030244X",
-        "S0021961420301294",
-      ],
-      browser
-    );
-    console.log(d);
-    return;
+    // const h = [
+    //   "S0034528818315327",
+    //   "S0003347220302657",
+    //   "S000334722030289X",
+    //   "S0009279719320046",
+    //   "S0014483519306608",
+    //   "S0003347220303018",
+    //   "S000927971932004",
+    // ];
+    // const d = await run(h, browser);
+    // console.log(d);
+    // return;
 
     const pool = new Pool({
       user: process.env["PG_USERNAME"],
@@ -289,7 +323,7 @@ const main = async () => {
     SELECT COUNT(*) AS "TODO"
     FROM "MixSub"
     WHERE "Abstract" NOT LIKE '%.'
-      AND COALESCE(TRIM("BetterAbstract"), '') = ''
+      AND (COALESCE(TRIM("BetterAbstract"), '') = '' OR COALESCE(TRIM("BetterHighlight"), '') = '')
     `
     );
 
@@ -308,7 +342,7 @@ const main = async () => {
       SELECT "Filename"
       FROM "MixSub"
       WHERE "Abstract" NOT LIKE '%.'
-        AND COALESCE(TRIM("BetterAbstract"), '') = ''
+        AND (COALESCE(TRIM("BetterAbstract"), '') = '' OR COALESCE(TRIM("BetterHighlight"), '') = '')
       LIMIT $1
       `,
       values: [batchSize],
@@ -339,21 +373,27 @@ const main = async () => {
 
       try {
         logger.info(
-          `batch started at ${new Date().toLocaleString(
-            "en-IN"
-          )} with contents ${filenames}`
+          `batch started at ${getIndianTime()} with contents ${filenames}`
         );
 
         const data = await run(filenames, browser);
 
+        logger.info(JSON.stringify(data, null, 4));
+
         for (let i = 0; i < filenames.length; ++i) {
           if (!data[i].abstract || !data[i].highlight) {
-            logger.error(
-              `found abstract or highlight to be falsy for filename ${filenames[i]}`,
-              data[i].abstract,
-              data[i].highlight
-            );
-            continue;
+            logger.error(`
+              filename ${filenames[i]} :: found abstract or highlight to be falsy 
+              abstract  :: ${data[i].abstract},
+              highlight :: ${data[i].highlight}`);
+
+            if (!data[i].abstract) {
+              data[i].abstract = "NOT_AVAILABLE";
+            }
+
+            if (!data[i].highlight) {
+              data[i].highlight = "NOT_AVAILABLE";
+            }
           }
 
           try {
@@ -366,7 +406,9 @@ const main = async () => {
           }
         }
 
-        logger.info("batch finished at", new Date().toLocaleString("en-IN"));
+        logger.info(
+          `batch finished at ${getIndianTime()} with contents ${filenames}`
+        );
       } catch (e) {
         logger.error("error occurred for batch", filenames, e);
       }
