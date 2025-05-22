@@ -259,10 +259,6 @@ def main(argv: list[str]):
         response_part="<|start_header_id|>assistant<|end_header_id|>",
     )
 
-    print(trn_ds.to_pandas().head())
-
-    return
-
     # gpu_stats = torch.cuda.get_device_properties(0)
     # start_gpu_memory = round(torch.cuda.max_memory_reserved() / 1024 / 1024 / 1024, 3)
     # max_memory = round(gpu_stats.total_memory / 1024 / 1024 / 1024, 3)

@@ -3,6 +3,28 @@ const dotenv = require("dotenv");
 const winston = require("winston");
 const { Pool } = require("pg");
 
+require("winston-daily-rotate-file");
+
+const transportAll = new winston.transports.DailyRotateFile({
+  filename: "application-%DATE%.log",
+  dirname: "log/all",
+  datePattern: "YYYY-MM-DD-HH-mm",
+  frequency: "30m",
+  maxSize: "1m",
+  maxFiles: "14d",
+});
+
+const transportError = new winston.transports.DailyRotateFile({
+  level: "error",
+  dirname: "log/error",
+  filename: "application-error-%DATE%.log",
+  datePattern: "YYYY-MM-DD-HH-mm",
+  zippedArchive: true,
+  frequency: "30m",
+  maxSize: "1m",
+  maxFiles: "14d",
+});
+
 // @ts-ignore
 const logger = winston.createLogger({
   transports: [
@@ -10,19 +32,12 @@ const logger = winston.createLogger({
     // - Write all logs with importance level of `error` or higher to `error.log`
     //   (i.e., error, fatal, but not other levels)
     //
-    new winston.transports.File({
-      // filename: "error-outputs.log",
-      level: "error",
-      dirname: "log",
-    }),
+    transportError,
     //
     // - Write all logs with importance level of `info` or higher to `combined.log`
     //   (i.e., fatal, error, warn, and info, but not trace)
     //
-    new winston.transports.File({
-      // filename: "combined-outputs.log",
-      dirname: "log",
-    }),
+    transportAll,
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
@@ -33,12 +48,39 @@ const logger = winston.createLogger({
 });
 
 /**
+ * @param {string} filename
  * @param {puppeteer.Page} page
  */
-const processPage = (page) => {
-  return page.$eval("#abstracts", (container) => {
+const processPage = (filename, page) => {
+  return page.evaluate((filename) => {
+    let title = null;
+    let titleRoot = document.querySelector("#screen-reader-main-title");
+    if (!titleRoot) {
+      console.warn(
+        `elem with id 'screen-reader-main-title' not found for ${filename}`
+      );
+      titleRoot = document?.querySelector("h1");
+    }
+    if (titleRoot instanceof HTMLElement) {
+      const titleCont = titleRoot.querySelector(".title-text");
+      if (titleCont instanceof HTMLElement) {
+        console.info(
+          `extracting title from title container (inner tag) in ${filename}`
+        );
+        title = titleCont.innerText.trim();
+      } else {
+        console.info(
+          `extracting title from title root (outer tag) in ${filename}`
+        );
+        title = titleRoot.innerText.trim();
+      }
+    } else {
+      console.error(`could not found title root in ${filename}`);
+    }
+
     // Fetch the sub-elements from the previously fetched container element
     // Get the displayed text and return it (`.innerText`)
+    const container = document.querySelector("#abstracts");
     const hlRoot = container?.querySelector(".author-highlights .list");
 
     // const hlSel = [
@@ -124,6 +166,7 @@ const processPage = (page) => {
         .replaceAll(/[\uFFFD]|\p{C}/gu, "")
         .trim();
     }
+
     // const highlightContainer = container?.querySelector(".author-highlights");
 
     // const highlight = nodeHasText(highlightContainer)
@@ -131,10 +174,11 @@ const processPage = (page) => {
     // : null;
 
     return {
+      title,
       highlight,
       abstract,
     };
-  });
+  }, filename);
 };
 
 /**
@@ -186,6 +230,24 @@ const run = async (filenames, browser) => {
       else request.continue();
     });
 
+    page.on("console", async (msg) => {
+      const msgArgs = msg.args();
+      for (let i = 0; i < msgArgs.length; ++i) {
+        logger.log(msg.type(), await msgArgs[i].jsonValue());
+      }
+    });
+
+    /**
+     * @typedef {object} DataType
+     * @property {string} filename - The unique identifier for the file. Required.
+     * @property {string |null} title - The title of the content. Optional.
+     * @property {string | null} abstract - A brief summary or abstract of the content. Optional.
+     * @property {string | null} highlight - A specific highlight or key takeaway from the content. Optional.
+     */
+
+    /**
+     * @type {DataType[]}
+     */
     const data = [];
 
     for (const filename of filenames) {
@@ -258,12 +320,17 @@ const run = async (filenames, browser) => {
       }
 
       try {
-        const point = await processPage(page);
+        const point = await processPage(filename, page);
         // logger.info(JSON.stringify(point, null, 4));
         data.push({ ...point, filename });
       } catch (e) {
         logger.error(`error while processing page for filename ${filename}`, e);
-        data.push({ filename: filename, abstract: null, highlight: null });
+        data.push({
+          filename,
+          title: null,
+          abstract: null,
+          highlight: null,
+        });
       }
 
       await new Promise((r) => setTimeout(r, waitTime + Math.random() * 3000));
@@ -349,15 +416,16 @@ const main = async () => {
     };
 
     /**
-     * @type {import("pg").QueryConfig<[string, string, string]>}
+     * @type {import("pg").QueryConfig<[string, string, string, string]>}
      */
     const updateAbstractHighlightQuery = {
       name: "update-abstract-highlight",
       text: `
       UPDATE "MixSub"
-      SET "BetterAbstract" = $1,
-          "BetterHighlight" = $2
-      WHERE "Filename" = $3;
+      SET "Title" = $1,
+          "BetterAbstract" = $2,
+          "BetterHighlight" = $3
+      WHERE "Filename" = $4;
       `,
     };
 
@@ -370,6 +438,11 @@ const main = async () => {
        * @type {string[]}
        */
       const filenames = res.rows.map((r) => r["Filename"]);
+      if (filenames.length == 0) {
+        // we are breaking using update count, but this is just extra protection
+        logger.info("breaking as filenames count is zero");
+        break;
+      }
 
       try {
         logger.info(
@@ -381,28 +454,30 @@ const main = async () => {
         logger.info(JSON.stringify(data, null, 4));
 
         for (let i = 0; i < filenames.length; ++i) {
-          if (!data[i].abstract || !data[i].highlight) {
-            logger.error(`
-              filename ${filenames[i]} :: found abstract or highlight to be falsy 
-              abstract  :: ${data[i].abstract},
-              highlight :: ${data[i].highlight}`);
+          if (!data[i].abstract) {
+            logger.error(`found abstract to be falsy for ${filenames[i]}`);
+            data[i].abstract = "NOT_AVAILABLE";
+          }
 
-            if (!data[i].abstract) {
-              data[i].abstract = "NOT_AVAILABLE";
-            }
-
-            if (!data[i].highlight) {
-              data[i].highlight = "NOT_AVAILABLE";
-            }
+          if (!data[i].highlight) {
+            logger.error(`found highlight to be falsy for ${filenames[i]}`);
+            data[i].highlight = "NOT_AVAILABLE";
           }
 
           try {
             await client.query(
               updateAbstractHighlightQuery, //
-              [data[i].abstract, data[i].highlight, filenames[i]]
+              [
+                data[i].title, //
+                data[i].abstract,
+                data[i].highlight,
+                filenames[i],
+              ]
             );
           } catch (e) {
             logger.error("could not update for filename", filenames[i]);
+          } finally {
+            updtCnt += 1;
           }
         }
 

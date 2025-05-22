@@ -61,6 +61,30 @@ def extract_broken_abstracts(engine: sqlalchemy.Engine):
         df.to_excel(writer, sheet_name="MixSub", index=False)
 
 
+def store_article_ids(engine: sqlalchemy.Engine):
+    def process_id(filename: str):
+        return {
+            "filename": filename.strip(),
+            "highlight": "ADDED_MANUALLY",
+            "abstract": "ADDED_MANUALLY_2",
+            "split": "TRAIN",
+        }
+
+    stmt = sqlalchemy.text("""
+    INSERT INTO "MixSub" ("Filename", "Highlight", "Abstract", "Split") 
+    VALUES (:filename, :highlight, :abstract, :split)
+    ON CONFLICT DO NOTHING
+    """)
+
+    with (
+        engine.connect() as conn,
+        open("./scripts/names.txt", "r", encoding="utf-8") as f,
+    ):
+        name_list = list(map(process_id, f.readlines()))
+        conn.execute(stmt, name_list)
+        conn.commit()
+
+
 if __name__ == "__main__":
     config = dotenv_values(".env")
 
@@ -76,6 +100,7 @@ if __name__ == "__main__":
     engine = sqlalchemy.create_engine(conn_url)
 
     # populate_database(engine)
-    extract_broken_abstracts(engine)
+    # extract_broken_abstracts(engine)
+    store_article_ids(engine)
 
     engine.dispose()

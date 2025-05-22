@@ -15,6 +15,23 @@ FROM
 SELECT COUNT(*)
 FROM "MixSub";
 
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE "Split" = 'VALIDATION';
+
+
+SELECT A.P + B.P + C.P AS TOTAL
+FROM
+  (SELECT COUNT(*) AS P
+   FROM train) AS A,
+
+  (SELECT COUNT(*) AS P
+   FROM test) AS B,
+
+  (SELECT COUNT(*) AS P
+   FROM validation) AS C;
+
 --
 
 SELECT *
@@ -48,6 +65,9 @@ ALTER TABLE "MixSub" ADD COLUMN "BetterHighlight" TEXT;
 ALTER TABLE "MixSub" ADD COLUMN "BetterAbstract" TEXT;
 
 
+ALTER TABLE "MixSub" ADD COLUMN "Title" TEXT;
+
+
 SELECT *
 FROM "MixSub"
 LIMIT 10;
@@ -60,13 +80,56 @@ WHERE "Abstract" NOT LIKE '%.'
 
 
 UPDATE "MixSub"
-SET "BetterHighlight" = "",
-    "BetterAbstract" = ""
-WHERE "Filename" = "";
+SET "BetterHighlight" = '',
+    "BetterAbstract" = ''
+WHERE "Filename" = '';
+
+
+SELECT *
+FROM "MixSub"
+WHERE "Abstract" NOT LIKE '%.'
+  AND (COALESCE(TRIM("BetterHighlight"), '') = ''
+       OR COALESCE(TRIM("BetterAbstract"), '') = '');
+
+
+SELECT *
+FROM "MixSub"
+WHERE "Abstract" NOT LIKE '%.'
+  AND ("BetterHighlight" = 'NOT_AVAILABLE'
+       OR "BetterAbstract" = 'NOT_AVAILABLE');
+
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE "Abstract" NOT LIKE '%.';
+
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE "Abstract" NOT LIKE '%.'
+  AND "BetterAbstract" IS NOT NULL;
 
 
 SELECT COUNT(DISTINCT "Filename")
 FROM "MixSub"
 WHERE "Abstract" NOT LIKE '%.'
-  AND (COALESCE(TRIM("BetterHighlight"), '') <> ''
-       OR COALESCE(TRIM("BetterAbstract"), '') <> '');
+  AND ("BetterHighlight" IS NULL
+       OR "BetterAbstract" IS NULL);
+
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE (COALESCE(TRIM("BetterAbstract"), '') = ''
+       AND "Abstract" NOT LIKE '%.');
+
+DESCRIBE "MixSub";
+
+
+select *
+from INFORMATION_SCHEMA.COLUMNS
+where table_name = 'MixSub';
+
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE "Highlight" = 'ADDED_MANUALLY';

@@ -6,7 +6,7 @@ from src.config import Config
 
 def get_summarizer_model_tokenizer():
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name="AdityaMayukhSom/Llama-3.2-1B-Instruct-bnb-4bit-MixSub",
+        model_name="AdityaMayukhSom/LLaMA-3.2-1B-Instruct-MixSubV1",
         max_seq_length=2048,
         load_in_4bit=True,
         dtype=torch.bfloat16 if is_bfloat16_supported() else torch.float16,
