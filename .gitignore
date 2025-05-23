@@ -11,3 +11,4 @@ certs*/
 data/*
 **/node_moduless
 names.txt
+crawl/log/*

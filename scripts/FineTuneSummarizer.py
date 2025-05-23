@@ -1,9 +1,10 @@
 import json
 import os
 import sys
-from typing import Literal
 
 import numpy as np
+import pandas as pd
+import sqlalchemy as sa
 import torch
 from dotenv import dotenv_values
 
@@ -12,34 +13,18 @@ from unsloth.chat_templates import train_on_responses_only  # isort:skip
 from transformers import DataCollatorForSeq2Seq, TrainingArguments  # isort:skip
 from transformers.models.llama import LlamaForCausalLM  # isort:skip
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast  # isort:skip
-from datasets import DatasetDict, load_dataset  # isort:skip
+from datasets import DatasetDict, Dataset  # isort:skip
 from peft import PeftModelForCausalLM  # isort:skip
 from trl import SFTTrainer  # isort:skip
 import evaluate  # isort:skip
 
 
-class FineTuneConf:
-    BASE_MODEL_REPO = "unsloth/Llama-3.2-1B-Instruct-bnb-4bit"
-
-    TRAINED_MODEL_ACNT = "AdityaMayukhSom"
-    TRAINED_MODEL_NAME = "Llama-3.2-1B-Instruct-MixSub-Remastered"
-    TRAINED_MODEL_REPO = f"{TRAINED_MODEL_ACNT}/{TRAINED_MODEL_NAME}"
-
-    SUMMARIZER_INSTRUCTION = """
-    You are instructed to generate a scientifically accurate highlight of the provided passage without additional
-    sentences such as headings or introductions before or after the generated text as it will be used as summary
-    in a custom dataset. The highlight should sound plausible and should not contain incorrect information. Generate
-    3-5 concise highlight points from the provided research paper abstract, covering key contributions, methods and
-    outcomes. Each point should contain 10 to 15 words only. Return the points in plain text format without bullets.
-
-    No Additional Commentary: Exclude lines like "Here are 3-5 concise highlight points".
-    """
-
-
 def prepare_prompt(
     examples: dict[str, list[str]],
     *,
-    tokenizer: PreTrainedTokenizerFast,
+    tknzr: PreTrainedTokenizerFast,
+    sys_instr: str,
+    usr_instr: str,
 ):
     prompts: list[str] = []
 
@@ -50,24 +35,23 @@ def prepare_prompt(
         row_json = [
             {
                 "role": "system",
-                "content": FineTuneConf.SUMMARIZER_INSTRUCTION,
+                "content": sys_instr,
             },
             {
                 "role": "user",
-                "content": abstract,
+                "content": f"{usr_instr}\n\n{abstract}",
             },
             {
                 "role": "assistant",
                 # Must add EOS_TOKEN, otherwise your generation will go on forever!
-                "content": highlight + tokenizer.eos_token,
+                "content": highlight + tknzr.eos_token,
             },
         ]
 
-        prompt = tokenizer.apply_chat_template(
+        prompt = tknzr.apply_chat_template(
             row_json,
             tokenize=False,
             add_generation_prompt=False,
-            return_tensors="pt",
         )
 
         prompts.append(prompt)
@@ -77,40 +61,76 @@ def prepare_prompt(
     }
 
 
-def get_mixsub(
+def prepare_mixsub(
+    engine: sa.Engine,
     tknz: PreTrainedTokenizerFast,
-    *,
-    trim_ds: bool = False,
-    trim_trn_len=2000,
-    trim_val_len=1000,
-    trim_tst_len=1000,
 ):
-    # https://huggingface.co/docs/datasets/en/loading#hugging-face-hub
-    ds: DatasetDict[Literal["train", "validation", "test"]] = load_dataset(
-        "TRnlp/MixSub"
+    extract_query = sa.text("""
+    SELECT "Filename",
+        CASE
+            WHEN "BetterAbstract" IS NOT NULL
+                    AND "BetterAbstract" != 'NOT_AVAILABLE' THEN "BetterAbstract"
+            ELSE "Abstract"
+        END AS "Abstract",
+        CASE
+            WHEN "BetterHighlight" IS NOT NULL
+                    AND "BetterHighlight" != 'NOT_AVAILABLE' THEN "BetterHighlight"
+            ELSE "Highlight"
+        END AS "Highlight"
+    FROM "MixSub"
+    WHERE "Split" = :split; 
+    """)
+
+    with engine.connect() as conn:
+        trn_df = pd.read_sql(extract_query, conn, params={"split": "TRAIN"})
+        val_df = pd.read_sql(extract_query, conn, params={"split": "VALIDATION"})
+        tst_df = pd.read_sql(extract_query, conn, params={"split": "TEST"})
+
+    print("train dataframe null", trn_df.isnull().sum().sum())
+    print("validation dataframe null", val_df.isnull().sum().sum())
+    print("test dataframe null", tst_df.isnull().sum().sum())
+
+    trn_ds = Dataset.from_pandas(trn_df)
+    val_ds = Dataset.from_pandas(val_df)
+    tst_ds = Dataset.from_pandas(tst_df)
+
+    dd = DatasetDict(
+        {
+            "train": trn_ds,
+            "validation": val_ds,
+            "test": tst_ds,
+        }
     )
+
+    # https://huggingface.co/docs/datasets/en/loading#hugging-face-hub
+    # ds: DatasetDict[Literal["train", "validation", "test"]] = load_dataset(
+    #     "TRnlp/MixSub"
+    # )
 
     # Changing all the column names to have uniform singular forms
     # All column names are now in singular form
-    ds = ds.rename_column("Highlights", "Highlight")
+    # ds = dd.rename_column("Highlights", "Highlight")
 
-    ds = ds.map(
-        prepare_prompt,
-        num_proc=os.cpu_count(),
-        batched=True,
-        fn_kwargs={"tokenizer": tknz},
-    )
+    with (
+        open("./scripts/instruction/finetune-system.txt", "r", encoding="utf-8") as sif,
+        open("./scripts/instruction/finetune-user.txt", "r", encoding="utf-8") as uif,
+    ):
+        sys_instr = sif.read()
+        usr_instr = uif.read()
+
+        dd = dd.map(
+            prepare_prompt,
+            num_proc=os.cpu_count(),
+            batched=True,
+            fn_kwargs={
+                "tokenizer": tknz,
+                "sys_instr": sys_instr,
+                "usr_instr": usr_instr,
+            },
+        )
 
     # execute the following lines to train the model on the entire dataset.
-    trn_ds, val_ds, tst_ds = ds["train"], ds["validation"], ds["test"]
-
-    # in case prototyping, set trim_ds to true
-    if trim_ds:
-        # select less number of examples for training, and even less for testing,
-        # if everything goes well,  we can fine tune on a larger dataset
-        trn_ds = trn_ds.select(range(trim_trn_len))
-        val_ds = val_ds.select(range(trim_val_len))
-        tst_ds = tst_ds.select(range(trim_tst_len))
+    trn_ds, val_ds, tst_ds = dd["train"], dd["validation"], dd["test"]
 
     return trn_ds, val_ds, tst_ds
 
@@ -179,8 +199,19 @@ def compute_metrics(eval_preds, tokenizer):
 def main(argv: list[str]):
     config = dotenv_values(".env")
 
+    conn_url = sa.URL.create(
+        drivername="postgresql+psycopg2",
+        username=config["PG_USERNAME"],
+        password=config["PG_PASSWORD"],
+        host=config["PG_HOST"],
+        database=config["PG_DATABASE"],
+        port=int(config["PG_PORT"]),
+    )
+
+    engine = sa.create_engine(conn_url)
+
     _t = FastLanguageModel.from_pretrained(
-        model_name=FineTuneConf.BASE_MODEL_REPO,
+        model_name=config["HF_BASE_MODEL_REPO"],
         max_seq_length=1024,
         dtype=torch.bfloat16 if is_bfloat16_supported() else torch.float16,
         load_in_4bit=True,
@@ -188,6 +219,8 @@ def main(argv: list[str]):
 
     flm: LlamaForCausalLM = _t[0]
     tknz: PreTrainedTokenizerFast = _t[1]
+
+    trn_ds, val_ds, tst_ds = prepare_mixsub(engine, tknz)
 
     model: PeftModelForCausalLM = FastLanguageModel.get_peft_model(
         flm,
@@ -209,8 +242,6 @@ def main(argv: list[str]):
         use_rslora=False,
         loftq_config=None,
     )
-
-    trn_ds, val_ds, tst_ds = get_mixsub(tknz)
 
     trainer = SFTTrainer(
         model=model,
@@ -246,17 +277,18 @@ def main(argv: list[str]):
             weight_decay=0.01,
             lr_scheduler_type="linear",
             seed=3407,
-            output_dir=FineTuneConf.TRAINED_MODEL_NAME,
+            output_dir=config["HF_TRAINED_MODEL_NAME"],
             report_to="none",
             load_best_model_at_end=True,
-            push_to_hub=False,
+            push_to_hub=True,
+            hub_model_id=f"{config['HF_TRAINED_MODEL_ACNT']}/{config['HF_TRAINED_MODEL_NAME']}",
         ),
     )
 
     trainer = train_on_responses_only(
         trainer,
-        instruction_part="<|start_header_id|>system<|end_header_id|>",
-        response_part="<|start_header_id|>assistant<|end_header_id|>",
+        instruction_part="<|start_header_id|>user<|end_header_id|>\n\n",
+        response_part="<|start_header_id|>assistant<|end_header_id|>\n\n",
     )
 
     # gpu_stats = torch.cuda.get_device_properties(0)
@@ -281,8 +313,7 @@ def main(argv: list[str]):
     # print(f"Peak reserved memory for training % of max memory = {lora_percentage} %.")
 
     trainer.push_to_hub(
-        commit_message="first epoch fine tuning on mixsub",
-        model_name=FineTuneConf.TRAINED_MODEL_NAME,
+        commit_message=f"Finetuning {config['HF_BASE_MODEL_REPO']} finished with HyperMixSub",
         token=config["HF_TOKEN"],
         # language="en",
         # finetuned_from=MODEL_NAME,

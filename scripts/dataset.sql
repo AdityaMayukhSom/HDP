@@ -3,12 +3,12 @@ SELECT w.W AS "WITH_FILTER",
        CAST(w.W AS DECIMAL(7, 2)) * 100 / v.V AS "PERCENTAGE",
        100 - PERCENTAGE AS "LOST"
 FROM
-  (SELECT COUNT(*) AS W
-   FROM train
-   WHERE LENGTH (Highlights) <= 1024 ) AS w,
+    (SELECT COUNT(*) AS W
+     FROM train
+     WHERE LENGTH (Highlights) <= 1024 ) AS w,
 
-  (SELECT COUNT(*) AS V
-   FROM train) AS v;
+    (SELECT COUNT(*) AS V
+     FROM train) AS v;
 
 --
 
@@ -23,14 +23,14 @@ WHERE "Split" = 'VALIDATION';
 
 SELECT A.P + B.P + C.P AS TOTAL
 FROM
-  (SELECT COUNT(*) AS P
-   FROM train) AS A,
+    (SELECT COUNT(*) AS P
+     FROM train) AS A,
 
-  (SELECT COUNT(*) AS P
-   FROM test) AS B,
+    (SELECT COUNT(*) AS P
+     FROM test) AS B,
 
-  (SELECT COUNT(*) AS P
-   FROM validation) AS C;
+    (SELECT COUNT(*) AS P
+     FROM validation) AS C;
 
 --
 
@@ -52,11 +52,20 @@ WHERE "Abstract" NOT LIKE '%.';
 
 SELECT STRING_AGG("SUB"."SDLINK", ' ')
 FROM
-  (SELECT 'https://www.sciencedirect.com/science/article/abs/pii/' || "Filename" AS "SDLINK"
-   FROM "MixSub"
-   WHERE "Abstract" NOT LIKE '%.'
-     AND "Split" = 'TRAIN'
-   LIMIT 100) AS "SUB";
+    (SELECT 'https://www.sciencedirect.com/science/article/abs/pii/' || "Filename" AS "SDLINK"
+     FROM "MixSub"
+     WHERE "Abstract" NOT LIKE '%.'
+         AND "Split" = 'TRAIN'
+     LIMIT 100) AS "SUB";
+
+
+SELECT "Filename",
+       "BetterAbstract",
+       "BetterHighlight"
+FROM "MixSub"
+WHERE LENGTH("BetterAbstract") > 0
+    AND LENGTH("BetterHighlight") > 0
+LIMIT 10;
 
 
 ALTER TABLE "MixSub" ADD COLUMN "BetterHighlight" TEXT;
@@ -76,7 +85,7 @@ LIMIT 10;
 SELECT COUNT(*) AS "TODO"
 FROM "MixSub"
 WHERE "Abstract" NOT LIKE '%.'
-  AND "BetterHighlight" IS NULL;
+    AND "BetterHighlight" IS NULL;
 
 
 UPDATE "MixSub"
@@ -87,16 +96,15 @@ WHERE "Filename" = '';
 
 SELECT *
 FROM "MixSub"
-WHERE "Abstract" NOT LIKE '%.'
-  AND (COALESCE(TRIM("BetterHighlight"), '') = ''
-       OR COALESCE(TRIM("BetterAbstract"), '') = '');
+WHERE "Filename" = 'S2666498422000771';
 
 
-SELECT *
+SELECT COUNT(*)
 FROM "MixSub"
-WHERE "Abstract" NOT LIKE '%.'
-  AND ("BetterHighlight" = 'NOT_AVAILABLE'
-       OR "BetterAbstract" = 'NOT_AVAILABLE');
+WHERE ("Abstract" = 'ADDED_MANUALLY'
+       OR "Abstract" NOT LIKE '%.')
+    AND (COALESCE(TRIM("BetterHighlight"), 'NOT_AVAILABLE') = 'NOT_AVAILABLE'
+         OR COALESCE(TRIM("BetterAbstract"), 'NOT_AVAILABLE') = 'NOT_AVAILABLE');
 
 
 SELECT COUNT(*)
@@ -107,14 +115,14 @@ WHERE "Abstract" NOT LIKE '%.';
 SELECT COUNT(*)
 FROM "MixSub"
 WHERE "Abstract" NOT LIKE '%.'
-  AND "BetterAbstract" IS NOT NULL;
+    AND "BetterAbstract" IS NOT NULL;
 
 
 SELECT COUNT(DISTINCT "Filename")
 FROM "MixSub"
 WHERE "Abstract" NOT LIKE '%.'
-  AND ("BetterHighlight" IS NULL
-       OR "BetterAbstract" IS NULL);
+    AND ("BetterHighlight" IS NULL
+         OR "BetterAbstract" IS NULL);
 
 
 SELECT COUNT(*)
@@ -133,3 +141,21 @@ where table_name = 'MixSub';
 SELECT COUNT(*)
 FROM "MixSub"
 WHERE "Highlight" = 'ADDED_MANUALLY';
+
+
+SELECT *
+FROM
+    (SELECT "Filename",
+            CASE
+                WHEN "BetterAbstract" IS NOT NULL
+                     AND "BetterAbstract" != 'NOT_AVAILABLE' THEN "BetterAbstract"
+                ELSE "Abstract"
+            END AS "Abstract",
+            CASE
+                WHEN "BetterHighlight" IS NOT NULL
+                     AND "BetterHighlight" != 'NOT_AVAILABLE' THEN "BetterHighlight"
+                ELSE "Highlight"
+            END AS "Highlight"
+     FROM "MixSub"
+     WHERE "Split" = 'TRAIN')
+WHERE "Abstract" NOT LIKE '%.';

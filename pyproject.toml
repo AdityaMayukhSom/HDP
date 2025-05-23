@@ -1,5 +1,5 @@
 [project]
-name = "hallucination-detection-pipeline"
+name = "HDP"
 version = "0.1.0"
 description = "Summarization and classification of abstracts with PG-LLaMA"
 readme = "README.md"
@@ -29,6 +29,8 @@ dependencies = [
     "scrapy>=2.13.0",
     "openpyxl>=3.1.5",
     "spacy>=3.8.6",
+    "unsloth-zoo>=2025.5.8",
+    "google-genai>=1.16.1",
 ]
 
 [project.optional-dependencies]

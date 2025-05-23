@@ -80,8 +80,17 @@ def store_article_ids(engine: sqlalchemy.Engine):
         engine.connect() as conn,
         open("./scripts/names.txt", "r", encoding="utf-8") as f,
     ):
-        name_list = list(map(process_id, f.readlines()))
-        conn.execute(stmt, name_list)
+        prefix = "https://www.sciencedirect.com/science/article/pii/"
+        name_list = list(
+            map(
+                lambda x: (
+                    x.strip().strip(prefix) if x.startswith(prefix) else x.strip()
+                ),
+                f.readlines(),
+            )
+        )
+        name_params = list(map(process_id, name_list))
+        conn.execute(stmt, name_params)
         conn.commit()
 
 
