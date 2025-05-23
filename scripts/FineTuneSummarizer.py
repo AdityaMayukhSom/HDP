@@ -63,7 +63,7 @@ def prepare_prompt(
 
 def prepare_mixsub(
     engine: sa.Engine,
-    tknz: PreTrainedTokenizerFast,
+    tknzr: PreTrainedTokenizerFast,
 ):
     extract_query = sa.text("""
     SELECT "Filename",
@@ -123,7 +123,7 @@ def prepare_mixsub(
             num_proc=os.cpu_count(),
             batched=True,
             fn_kwargs={
-                "tokenizer": tknz,
+                "tknzr": tknzr,
                 "sys_instr": sys_instr,
                 "usr_instr": usr_instr,
             },
@@ -215,20 +215,22 @@ def main(argv: list[str]):
         max_seq_length=1024,
         dtype=torch.bfloat16 if is_bfloat16_supported() else torch.float16,
         load_in_4bit=True,
+        token=config["HF_TOKEN"],
+        disable_log_stats=False,
     )
 
     flm: LlamaForCausalLM = _t[0]
-    tknz: PreTrainedTokenizerFast = _t[1]
+    tknzr: PreTrainedTokenizerFast = _t[1]
 
-    trn_ds, val_ds, tst_ds = prepare_mixsub(engine, tknz)
+    trn_ds, val_ds, tst_ds = prepare_mixsub(engine, tknzr)
 
     model: PeftModelForCausalLM = FastLanguageModel.get_peft_model(
         flm,
         r=16,
         target_modules=[
             "q_proj",
-            "k_proj",
             "v_proj",
+            "k_proj",
             "o_proj",
             "up_proj",
             "down_proj",
@@ -238,39 +240,36 @@ def main(argv: list[str]):
         lora_dropout=0,
         bias="none",
         use_gradient_checkpointing="unsloth",
-        random_state=42,
         use_rslora=False,
         loftq_config=None,
     )
 
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tknz,
+        tokenizer=tknzr,
         train_dataset=trn_ds,
-        eval_dataset=tst_ds,
+        eval_dataset=val_ds,
         # The field on which to train the model, we have added the generated prompt under 'Prompt'
         dataset_text_field="Prompt",
         # max_seq_length=MAX_SEQ_LEN,
         dataset_num_proc=2,
         packing=False,
-        compute_metrics=lambda preds: compute_metrics(preds, tknz),
+        compute_metrics=lambda preds: compute_metrics(preds, tknzr),
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         data_collator=DataCollatorForSeq2Seq(
-            tokenizer=tknz,
+            tokenizer=tknzr,
             model=model,
         ),
         args=TrainingArguments(
-            per_device_train_batch_size=16,
-            per_device_eval_batch_size=16,
-            gradient_accumulation_steps=4,
-            warmup_steps=2,
-            eval_strategy="steps",
-            eval_steps=2,
+            per_device_train_batch_size=4,
+            per_device_eval_batch_size=4,
             num_train_epochs=3,  # Set this to 1 for one full training run
-            save_total_limit=3,
-            save_steps=2,
+            eval_strategy="steps",
+            warmup_steps=32,
+            eval_steps=512,
+            save_steps=512,
             # max_steps = MAX_STEPS,
-            learning_rate=2e-4,
+            learning_rate=0.0002,
             fp16=not is_bfloat16_supported(),
             bf16=is_bfloat16_supported(),
             optim="adamw_8bit",
@@ -280,7 +279,7 @@ def main(argv: list[str]):
             output_dir=config["HF_TRAINED_MODEL_NAME"],
             report_to="none",
             load_best_model_at_end=True,
-            push_to_hub=True,
+            # push_to_hub=True,
             hub_model_id=f"{config['HF_TRAINED_MODEL_ACNT']}/{config['HF_TRAINED_MODEL_NAME']}",
         ),
     )
