@@ -1,8 +1,5 @@
-import json
 from typing import Literal
 
-import torch
-from datasets import DatasetDict, load_dataset
 from dotenv import dotenv_values
 from google import genai
 
@@ -10,144 +7,40 @@ config = dotenv_values()
 client = genai.Client(api_key=config["GEMINI_API_KEY"])
 
 
-def get_mixsub():
-    ds: DatasetDict = load_dataset("TRnlp/MixSub")
-    # Changing all the column names to have uniform singular forms
-    # All column names are now in singular form
-    ds = ds.rename_column("Highlights", "Highlight")
-    return ds
+def generate_hallucinated_highlights(row) -> dict[Literal["Hallucination"], str]:
+    abstract: str = row["Abstract"]
+    highlight: str = row["Highlight"]
 
+    mes = f"""
+    You're instructed to generate scientifically inaccurate highlights for a document without additional sentences like headings, introductions, or texts before or after the generated output. You must add both factual and non factual hallucinations in the output, change values, change names, make the highlight look like accurate while injecting hallucination. The output will be directly used as datapoint in a custom dataset. The highlight should sound plausible but contain incorrect information. Generate 3-6 concise highlight points from the provided research paper abstract, covering key contributions, methods, and outcomes. Each point should contain 15 to 20 words only. Return the points in plain text format without bullets. Also add enough number of factual hallucinations in the generated summary i.e. contents that can be deduced from the abstract or is general knowledge or common sense.
 
-def generate_hallucinated_highlights(
-    row,
-    *args,
-    instruction: str,
-    **kwargs,
-) -> dict[Literal["Hallucination"], str]:
-    init_identifier = "<|start_header_id|>assistant<|end_header_id|>"
-    term_identifier = "<|eot_id|>"
+    {{
+        "Abstract": "{abstract}", 
+        "Highlight": "{highlight}"
+    }},    
+    """
 
-    abstract = row["Abstract"]
-    highlight = row["Highlight"]
-
-    ins = instruction
-
-    mes = [
-        {
-            "role": "user",
-            "content": f"""
-            Generate hallucinated summary for the following document. You can use any method you have learned previously. #Hallucinated Summary# must not be longer than #Right Summary#.
-            
-            
-            #Document#: {abstract}
-
-            #Right Summary#: {highlight}
-            
-            #Hallucinated Summary#: 
-            
-            """,
-        }
-    ]
-
-    row_json = ins + mes
-
-    response = client.models.generate_content(
-        model="gemini-2.0-flash", contents="Explain how AI works in a few words"
-    )
-
-    print(row_json)
-
-    model_prompt = tokenizer.apply_chat_template(
-        row_json,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
-
-    model_inputs = tokenizer(
-        model_prompt,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-    ).to(device)
-
-    model_outputs = model.generate(
-        **model_inputs,
-        max_new_tokens=150,
-        num_return_sequences=1,
-    )
-
-    hallucination_list = tokenizer.batch_decode(
-        model_outputs,
-        skip_special_tokens=False,
-    )
-
-    print(hallucination_list)
-
-    # the generaed output contains the prompt, init identifier, generated highlight and term identifier
-    # the following code splits the output with init identifier, takes the second section which contains
-    # the generated highlight followed by term identifier, now splits the second section based on term
-    # identifier, takes the first section, which contains only the generated output. Then it strips the
-    # generated content to get rid of any white spaces from the beginning and the end, and replaces
-    # newline character with whitespace.
-    hallucination = hallucination_list[0]
-    hallucination = (
-        hallucination.split(init_identifier)[1]
-        .split(term_identifier)[0]
-        .strip()
-        .replace("\n", " ")
-    )
+    response = client.models.generate_content(model="gemini-2.0-flash", contents=mes)
 
     return {
-        "Hallucination": hallucination,
+        "Hallucination": response.text,
     }
 
 
 if __name__ == "__main__":
     config = dotenv_values(".env")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    l = generate_hallucinated_highlights(
+        {
+            "Abstract": """
+The enzyme phytases facilitates in degradation of phytate . Phytate as a natural compound serving as primary source for storing phosphate among plants . From the biotechnological prospects there has been a considerable leap in the Enzyme technology which has massively broadened the commercial aspects of phytase . Their impact in the food and feed industry has become much more quintessential in the recent times . For nearly two decades there has been a wide array of commercially available microbial phytases in market with commercial significance as it facilitates the farmers with essential . Phytases in particular can not be neglected from being a threat for human diet due to its anti nutrient activity as they served as strong chelating agent against many divalent minerals . Similar to phytases activity PA also was found to showcase a potential towards binding positively charged proteins amino acids and or multivalent cations or minerals in foods . Besides the food industry has overlooked on the very fact of phytase significance as its supplementation results in improving the net availability of the essential trace elements and minerals to humans . Similarly they serve as an essential feed source for mongastric animals.
+""",
+            "Highlight": """
+Use of phytase enzyme in removing the environmental concern and marine eutrophication. Advantages of exploring the properties of phytic acid. Commercial aspects for the production and use of microbial phytase in food and feed industries. Biotechnological approaches for production of ideal phytase. Sources of phytic acid and phytase.
+""",
+        }
+    )
 
-    with open("./scripts/instruction/oneturn.json", "r", encoding="utf-8") as f:
-        instruction = json.load(f)
+    print(l)
 
-    # model, tokenizer = FastLanguageModel.from_pretrained(
-    #     model_name="unsloth/Qwen2.5-3B-Instruct-bnb-4bit",
-    #     max_seq_length=2048,  # Choose any for long context!
-    #     load_in_4bit=True,  # 4 bit quantization to reduce memory
-    #     full_finetuning=False,  # [NEW!] We have full finetuning now!
-    #     # token = "hf_...", # use one if using gated models
-    # )
-
-    # mixsub = get_mixsub()
-
-    # Map the existing dataset rows into hallucinated highlights, the returned
-    # dictionary from the function passed to map, will automatically be appended
-    # to the dataset on which the map function is being called, and a new dataset
-    # will be returned, so note that mapping does not modify the dataset on which
-    # it is being called on.
-    # logger.info("hallucinated dataset generation started")
-    # hal_ds = mixsub.map(
-    #     generate_hallucinated_highlights,
-    #     fn_kwargs={
-    #         "model": model,
-    #         "tokenizer": tokenizer,
-    #         "device": torch.device(device),
-    #     },
-    # )
-    # logger.info("hallucinated dataset generation finished")
-
-    # logger.info("hallucinated dataset saving started")
-    # hal_ds.push_to_hub("AdityaMayukhSom/MixSubV2-HaluEval", token=config["HF_TOKEN"])
-    # logger.info("hallucinated dataset saved to huggingface as hf dataset")
-
-    # hal = generate_hallucinated_highlights(
-    #     {
-    #         "Abstract": "Decreasing in fossil fuel reserves and its adverse environmental effects motivate the development of the biofuels production, such as biodiesel. Animal fats residues, generated by agro-processing industries in large quantities, can be considered a low-cost raw material for conversion to alkyl esters (biodiesel). This study aims to evaluate the production of biodiesel (fatty acid methyl esters – FAME) from enzymatic catalysis applying the novel commercial lipase in liquid formulation NS-40116 obtained from the modified Thermomyces lanuginosus microorganism, using residual chicken oil as feedstock. The reaction parameters “oil to methanol molar ratio”, “water content” and “temperature” were investigated through a statistical design. At 200 rpm during 36 h, enzymatic catalysis (0.3 wt% of lipase to residual chicken oil) presented the most appropriate condition at 35 °C, 2 wt% of water content and oil to methanol molar ratio of 1:4, yielding 93.16% in FAME. Therefore, the recovery of that waste was satisfactorily performed in feasible conditions, producing a less environment-harmful biofuel.",
-    #         "Highlight": "Low-cost residual chicken fat was proposed for enzyme-catalyzed biodiesel production.  The lipase NS-40116 from T. lanuginosus in liquid formulation was utilized.  Temperature, fat to methanol molar ratio and water content were assessed.  It was obtained 93.16% of fatty acid methyl esters (FAME) at feasible conditions.",
-    #     },
-    #     instruction=instruction,
-    #     model=model,
-    #     tokenizer=tokenizer,
-    #     device=device,
-    # )
-
-    # print(hal)
+    # with open("./scripts/instruction/oneturn.json", "r", encoding="utf-8") as f:
+    #     instruction = json.load(f)

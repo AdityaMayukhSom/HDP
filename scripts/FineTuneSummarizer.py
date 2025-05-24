@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import sys
 
 import numpy as np
@@ -10,7 +11,7 @@ from dotenv import dotenv_values
 
 from unsloth import FastLanguageModel, is_bfloat16_supported  # isort:skip
 from unsloth.chat_templates import train_on_responses_only  # isort:skip
-from transformers import DataCollatorForSeq2Seq, TrainingArguments  # isort:skip
+from transformers import TrainingArguments  # isort:skip
 from transformers.models.llama import LlamaForCausalLM  # isort:skip
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast  # isort:skip
 from datasets import DatasetDict, Dataset  # isort:skip
@@ -152,7 +153,7 @@ def preprocess_logits_for_metrics(logits, labels):
     return logits.argmax(dim=-1)
 
 
-def compute_metrics(eval_preds, tokenizer):
+def compute_metrics(eval_preds, tokenizer: PreTrainedTokenizerFast):
     # Here preds are all_preds and labels are label_ids/all_labels.
     preds, labels = eval_preds
 
@@ -229,6 +230,8 @@ def main(argv: list[str]):
     model: PeftModelForCausalLM = FastLanguageModel.get_peft_model(
         flm,
         r=16,
+        lora_alpha=16,
+        lora_dropout=0,
         target_modules=[
             "q_proj",
             "v_proj",
@@ -238,9 +241,6 @@ def main(argv: list[str]):
             "down_proj",
             "gate_proj",
         ],
-        lora_alpha=16,
-        lora_dropout=0,
-        bias="none",
         use_gradient_checkpointing="unsloth",
         use_rslora=True,
         loftq_config=None,
@@ -251,34 +251,35 @@ def main(argv: list[str]):
         tokenizer=tknzr,
         train_dataset=trn_ds,
         eval_dataset=val_ds,
+        packing=True,
         # The field on which to train the model, we have added the generated prompt under 'Prompt'
         dataset_text_field="Prompt",
         # max_seq_length=MAX_SEQ_LEN,
         dataset_num_proc=os.cpu_count(),
-        packing=False,
         compute_metrics=lambda preds: compute_metrics(preds, tknzr),
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-        data_collator=DataCollatorForSeq2Seq(
-            tokenizer=tknzr,
-            # model=model,
-        ),
+        # data_collator=DataCollatorForSeq2Seq(
+        #     tokenizer=tknzr,
+        #     model=model,
+        # ),
         args=TrainingArguments(
             per_device_train_batch_size=6,
             per_device_eval_batch_size=6,
             num_train_epochs=4,  # Set this to 1 for one full training run
             warmup_steps=512,
-            eval_strategy="steps",
-            eval_steps=512,
+            eval_strategy="epoch",
             save_strategy="steps",
-            save_steps=256,
+            save_steps=512,
             learning_rate=0.0004,
             fp16=not is_bfloat16_supported(),
             bf16=is_bfloat16_supported(),
             optim="adamw_8bit",
             weight_decay=0.01,
             lr_scheduler_type="linear",
-            output_dir=config["HF_TRAINED_MODEL_NAME"],
             report_to="none",
+            output_dir=config["MODEL_OUTPUT_DIR"],
+            logging_dir=config["MODEL_LOGGING_DIR"],
+            logging_steps=1,
             # load_best_model_at_end=True,
             # push_to_hub=True,
             hub_model_id=f"{config['HF_TRAINED_MODEL_ACNT']}/{config['HF_TRAINED_MODEL_NAME']}",
@@ -298,7 +299,10 @@ def main(argv: list[str]):
     # print(f"GPU = {gpu_stats.name}. Max memory = {max_memory} GB.")
     # print(f"{start_gpu_memory} GB of memory reserved.")
 
-    trainer_stats = trainer.train()
+    if list(pathlib.Path(config["MODEL_OUTPUT_DIR"]).glob("checkpoint-*")):
+        trainer_stats = trainer.train(resume_from_checkpoint=True)
+    else:
+        trainer_stats = trainer.train()
 
     # used_memory = round(torch.cuda.max_memory_reserved() / 1024 / 1024 / 1024, 3)
     # used_memory_for_lora = round(used_memory - start_gpu_memory, 3)

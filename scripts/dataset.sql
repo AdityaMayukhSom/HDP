@@ -159,3 +159,19 @@ FROM
      FROM "MixSub"
      WHERE "Split" = 'TRAIN')
 WHERE "Abstract" NOT LIKE '%.';
+
+
+SELECT COUNT(*)
+FROM
+    (SELECT "Filename",
+            CASE
+                WHEN "BetterAbstract" IS NOT NULL
+                     AND "BetterAbstract" != 'NOT_AVAILABLE' THEN "BetterAbstract"
+                ELSE "Abstract"
+            END AS "Abstract",
+            CASE
+                WHEN "BetterHighlight" IS NOT NULL
+                     AND "BetterHighlight" != 'NOT_AVAILABLE' THEN "BetterHighlight"
+                ELSE "Highlight"
+            END AS "Highlight"
+     FROM "MixSub");
