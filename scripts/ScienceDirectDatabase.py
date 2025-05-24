@@ -81,16 +81,25 @@ def store_article_ids(engine: sqlalchemy.Engine):
         open("./scripts/names.txt", "r", encoding="utf-8") as f,
     ):
         prefix = "https://www.sciencedirect.com/science/article/pii/"
-        name_list = list(
-            map(
-                lambda x: (
-                    x.strip().strip(prefix) if x.startswith(prefix) else x.strip()
-                ),
-                f.readlines(),
-            )
-        )
-        name_params = list(map(process_id, name_list))
-        conn.execute(stmt, name_params)
+
+        filename_params = []
+
+        for line in f.readlines():
+            line = line.strip()
+
+            if line == "":
+                continue
+
+            # to handle bullet names
+            article_id = line.split()[-1].strip()
+
+            if article_id.startswith(prefix):
+                article_id = article_id.strip(prefix)
+
+            param = process_id(article_id)
+            filename_params.append(param)
+
+        conn.execute(stmt, filename_params)
         conn.commit()
 
 

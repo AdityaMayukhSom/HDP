@@ -17,6 +17,7 @@ from datasets import DatasetDict, Dataset  # isort:skip
 from peft import PeftModelForCausalLM  # isort:skip
 from trl import SFTTrainer  # isort:skip
 import evaluate  # isort:skip
+from huggingface_hub import login
 
 
 def prepare_prompt(
@@ -198,6 +199,7 @@ def compute_metrics(eval_preds, tokenizer):
 
 def main(argv: list[str]):
     config = dotenv_values(".env")
+    login(token=config["HF_TOKEN"])
 
     conn_url = sa.URL.create(
         drivername="postgresql+psycopg2",
@@ -240,7 +242,7 @@ def main(argv: list[str]):
         lora_dropout=0,
         bias="none",
         use_gradient_checkpointing="unsloth",
-        use_rslora=False,
+        use_rslora=True,
         loftq_config=None,
     )
 
@@ -252,33 +254,32 @@ def main(argv: list[str]):
         # The field on which to train the model, we have added the generated prompt under 'Prompt'
         dataset_text_field="Prompt",
         # max_seq_length=MAX_SEQ_LEN,
-        dataset_num_proc=2,
+        dataset_num_proc=os.cpu_count(),
         packing=False,
         compute_metrics=lambda preds: compute_metrics(preds, tknzr),
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         data_collator=DataCollatorForSeq2Seq(
             tokenizer=tknzr,
-            model=model,
+            # model=model,
         ),
         args=TrainingArguments(
-            per_device_train_batch_size=4,
-            per_device_eval_batch_size=4,
-            num_train_epochs=3,  # Set this to 1 for one full training run
+            per_device_train_batch_size=6,
+            per_device_eval_batch_size=6,
+            num_train_epochs=4,  # Set this to 1 for one full training run
+            warmup_steps=512,
             eval_strategy="steps",
-            warmup_steps=32,
             eval_steps=512,
-            save_steps=512,
-            # max_steps = MAX_STEPS,
-            learning_rate=0.0002,
+            save_strategy="steps",
+            save_steps=256,
+            learning_rate=0.0004,
             fp16=not is_bfloat16_supported(),
             bf16=is_bfloat16_supported(),
             optim="adamw_8bit",
             weight_decay=0.01,
             lr_scheduler_type="linear",
-            seed=3407,
             output_dir=config["HF_TRAINED_MODEL_NAME"],
             report_to="none",
-            load_best_model_at_end=True,
+            # load_best_model_at_end=True,
             # push_to_hub=True,
             hub_model_id=f"{config['HF_TRAINED_MODEL_ACNT']}/{config['HF_TRAINED_MODEL_NAME']}",
         ),
@@ -288,6 +289,7 @@ def main(argv: list[str]):
         trainer,
         instruction_part="<|start_header_id|>user<|end_header_id|>\n\n",
         response_part="<|start_header_id|>assistant<|end_header_id|>\n\n",
+        num_proc=os.cpu_count(),
     )
 
     # gpu_stats = torch.cuda.get_device_properties(0)
@@ -311,9 +313,13 @@ def main(argv: list[str]):
     # print(f"Peak reserved memory % of max memory = {used_percentage} %.")
     # print(f"Peak reserved memory for training % of max memory = {lora_percentage} %.")
 
+    model.save_pretrained(
+        save_directory=f"${config['HF_TRAINED_MODEL_NAME']}-SaveDirectory"
+    )
+
     trainer.push_to_hub(
         commit_message=f"Finetuning {config['HF_BASE_MODEL_REPO']} finished with HyperMixSub",
-        token=config["HF_TOKEN"],
+        # token=config["HF_TOKEN"],
         # language="en",
         # finetuned_from=MODEL_NAME,
         # dataset=DATASET_NAME
