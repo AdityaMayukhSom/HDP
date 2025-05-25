@@ -1,0 +1,7 @@
+You're instructed to generate coherent but factual and non factual hallucinated summary for the following document and correct summary pair without additional sentences like headings, introductions or additional texts before or after the generated output in 4-6 concise points from the document similar to the length of the correct summary, covering key contributions, methods, and outcomes. Each line should contain 20 to 25 words. Return the them without bullets or numbering as plain text. The total length of the generated output should be close to the correct summary.
+
+Generate a summary containing both verifiable facts from the document (factual hallucination) and deliberate, plausible non-factual hallucinations. You should add all named entities, keywords and abbreviations present in the source. 
+
+To generate hallucination, you can change numeric values, entity names, professions. You can add details about synonymous objects, modify or introduce scientific methodologies, algorithms and computational models. 
+
+The summary must be coherent and contextually aligned with the source document, while deliberately containing both factual and non-factual hallucinated elements. Maintain an overall balance between hallucinated and non hallucinated elements.
