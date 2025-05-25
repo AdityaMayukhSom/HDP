@@ -6,7 +6,7 @@ from datasets import DatasetDict, load_dataset
 from dotenv import dotenv_values
 
 
-def get_mixsub():
+def init_mixsub_database(engine: sqlalchemy.Engine):
     DatasetDictKeys = Literal["train", "validation", "test"]
 
     # https://huggingface.co/docs/datasets/en/loading#hugging-face-hub
@@ -18,12 +18,6 @@ def get_mixsub():
 
     # execute the following lines to train the model on the entire dataset.
     trn_ds, val_ds, tst_ds = ds["train"], ds["validation"], ds["test"]
-
-    return trn_ds, val_ds, tst_ds
-
-
-def populate_database(engine: sqlalchemy.Engine):
-    trn_ds, val_ds, tst_ds = get_mixsub()
 
     trn_ds = trn_ds.map(lambda _: {"Split": "TRAIN"})
     val_ds = val_ds.map(lambda _: {"Split": "VALIDATION"})
@@ -38,15 +32,13 @@ def populate_database(engine: sqlalchemy.Engine):
 def extract_broken_abstracts(engine: sqlalchemy.Engine):
     query = """
     SELECT
-      "Filename",
-      "Abstract",
-      "Highlight",
+      "PII",
       "Split",
-      'https://www.sciencedirect.com/science/article/abs/pii/' || "Filename" AS "ScienceDirectLink"
+      'www.sciencedirect.com/science/article/abs/pii/' || "PII" AS "ScienceDirectLink"
     FROM
       "MixSub"
     WHERE
-      "Abstract" NOT LIKE '%%.';
+      "OriginalAbstract" NOT LIKE '%%.';
     """
 
     with (
@@ -61,20 +53,10 @@ def extract_broken_abstracts(engine: sqlalchemy.Engine):
         df.to_excel(writer, sheet_name="MixSub", index=False)
 
 
-def store_article_ids(engine: sqlalchemy.Engine):
-    def process_id(filename: str):
-        return {
-            "filename": filename.strip(),
-            "highlight": "ADDED_MANUALLY",
-            "abstract": "ADDED_MANUALLY_2",
-            "split": "TRAIN",
-        }
-
-    stmt = sqlalchemy.text("""
-    INSERT INTO "MixSub" ("Filename", "Highlight", "Abstract", "Split") 
-    VALUES (:filename, :highlight, :abstract, :split)
-    ON CONFLICT DO NOTHING
-    """)
+def store_piis(engine: sqlalchemy.Engine):
+    stmt = sqlalchemy.text(
+        'INSERT INTO "MixSub" ("PII", "Split") VALUES (:pii, :split) ON CONFLICT DO NOTHING'
+    )
 
     with (
         engine.connect() as conn,
@@ -82,7 +64,7 @@ def store_article_ids(engine: sqlalchemy.Engine):
     ):
         prefix = "https://www.sciencedirect.com/science/article/pii/"
 
-        filename_params = []
+        pii_params = []
 
         for line in f.readlines():
             line = line.strip()
@@ -91,15 +73,19 @@ def store_article_ids(engine: sqlalchemy.Engine):
                 continue
 
             # to handle bullet names
-            article_id = line.split()[-1].strip()
+            pii = line.split()[-1].strip()
 
-            if article_id.startswith(prefix):
-                article_id = article_id.strip(prefix)
+            if pii.startswith(prefix):
+                pii = pii.strip(prefix)
 
-            param = process_id(article_id)
-            filename_params.append(param)
+            param = {
+                "pii": pii.strip(),
+                "split": "TRAIN",
+            }
 
-        conn.execute(stmt, filename_params)
+            pii_params.append(param)
+
+        conn.execute(stmt, pii_params)
         conn.commit()
 
 
@@ -117,8 +103,8 @@ if __name__ == "__main__":
 
     engine = sqlalchemy.create_engine(conn_url)
 
-    # populate_database(engine)
+    # init_mixsub_database(engine)
     # extract_broken_abstracts(engine)
-    store_article_ids(engine)
+    store_piis(engine)
 
     engine.dispose()

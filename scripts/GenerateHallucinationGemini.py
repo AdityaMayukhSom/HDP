@@ -4,7 +4,7 @@ from dotenv import dotenv_values
 from google import genai
 
 config = dotenv_values()
-# client = genai.Client(api_key=config["GEMINI_API_KEY"])
+client = genai.Client(api_key=config["GEMINI_API_KEY"])
 
 
 def generate_hallucinated_highlights(
@@ -16,14 +16,14 @@ def generate_hallucinated_highlights(
 
     mes = f"{instruction}\n\n{json.dumps(dat, indent=4)}".strip()
 
-    # res = client.models.generate_content(
-    #     model="gemini-2.0-flash",
-    #     contents=mes,
-    # )
+    res = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=mes,
+    )
 
     return {
-        # "Hallucination": res.text,
         "Message": mes,
+        "Hallucination": res.text,
     }
 
 

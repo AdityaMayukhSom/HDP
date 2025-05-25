@@ -30,8 +30,8 @@ def prepare_prompt(
 ):
     prompts: list[str] = []
 
-    abstracts = examples["Abstract"]
-    highlights = examples["Highlight"]
+    abstracts = examples["ArticleAbstract"]
+    highlights = examples["CorrectHighlight"]
 
     for abstract, highlight in zip(abstracts, highlights):
         row_json = [
@@ -68,18 +68,8 @@ def prepare_mixsub(
     tknzr: PreTrainedTokenizerFast,
 ):
     extract_query = sa.text("""
-    SELECT "Filename",
-        CASE
-            WHEN "BetterAbstract" IS NOT NULL
-                    AND "BetterAbstract" != 'NOT_AVAILABLE' THEN "BetterAbstract"
-            ELSE "Abstract"
-        END AS "Abstract",
-        CASE
-            WHEN "BetterHighlight" IS NOT NULL
-                    AND "BetterHighlight" != 'NOT_AVAILABLE' THEN "BetterHighlight"
-            ELSE "Highlight"
-        END AS "Highlight"
-    FROM "MixSub"
+    SELECT "PII", "ArticleAbstract", "CorrectHighlight"
+    FROM "MixSubView"
     WHERE "Split" = :split; 
     """)
 
@@ -103,15 +93,6 @@ def prepare_mixsub(
             "test": tst_ds,
         }
     )
-
-    # https://huggingface.co/docs/datasets/en/loading#hugging-face-hub
-    # ds: DatasetDict[Literal["train", "validation", "test"]] = load_dataset(
-    #     "TRnlp/MixSub"
-    # )
-
-    # Changing all the column names to have uniform singular forms
-    # All column names are now in singular form
-    # ds = dd.rename_column("Highlights", "Highlight")
 
     with (
         open("./scripts/instruction/finetune-system.txt", "r", encoding="utf-8") as sif,
@@ -265,7 +246,9 @@ def main(argv: list[str]):
         args=TrainingArguments(
             per_device_train_batch_size=6,
             per_device_eval_batch_size=6,
-            num_train_epochs=4,  # Set this to 1 for one full training run
+            num_train_epochs=int(
+                config["MODEL_EPOCHS"]
+            ),  # Set this to 1 for one full training run
             warmup_steps=512,
             eval_strategy="epoch",
             save_strategy="steps",
@@ -276,7 +259,7 @@ def main(argv: list[str]):
             optim="adamw_8bit",
             weight_decay=0.01,
             lr_scheduler_type="linear",
-            report_to="none",
+            report_to=["codecarbon", "tensorboard"],
             output_dir=config["MODEL_OUTPUT_DIR"],
             logging_dir=config["MODEL_LOGGING_DIR"],
             logging_steps=1,
@@ -299,6 +282,26 @@ def main(argv: list[str]):
     # print(f"GPU = {gpu_stats.name}. Max memory = {max_memory} GB.")
     # print(f"{start_gpu_memory} GB of memory reserved.")
 
+    # try:
+    #     tracker = OfflineEmissionsTracker(
+    #         country_iso_code="IND",
+    #         measure_power_secs=4,
+    #         save_to_file=True,
+    #         output_dir="./emissions",
+    #         log_level="debug",
+    #         tracking_mode="process",
+    #     )
+    #     tracker.start()
+    #     if list(pathlib.Path(config["MODEL_OUTPUT_DIR"]).glob("checkpoint-*")):
+    #         trainer_stats = trainer.train(resume_from_checkpoint=True)
+    #     else:
+    #         trainer_stats = trainer.train()
+    # except Exception as e:
+    #     print(e)
+    # finally:
+    #     emission = tracker.stop()
+    #     print(f"emission is {emission}")
+
     if list(pathlib.Path(config["MODEL_OUTPUT_DIR"]).glob("checkpoint-*")):
         trainer_stats = trainer.train(resume_from_checkpoint=True)
     else:
@@ -318,11 +321,11 @@ def main(argv: list[str]):
     # print(f"Peak reserved memory for training % of max memory = {lora_percentage} %.")
 
     model.save_pretrained(
-        save_directory=f"${config['HF_TRAINED_MODEL_NAME']}-SaveDirectory"
+        save_directory=f"{config['HF_TRAINED_MODEL_NAME']}-SaveDirectory"
     )
 
     trainer.push_to_hub(
-        commit_message=f"Finetuning {config['HF_BASE_MODEL_REPO']} finished with HyperMixSub",
+        commit_message=f"finished finetuning till {int(config['MODEL_EPOCHS'])} epochs",
         # token=config["HF_TOKEN"],
         # language="en",
         # finetuned_from=MODEL_NAME,

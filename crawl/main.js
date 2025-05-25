@@ -48,16 +48,16 @@ const logger = winston.createLogger({
 });
 
 /**
- * @param {string} filename
+ * @param {string} pii
  * @param {puppeteer.Page} page
  */
-const processPage = (filename, page) => {
-  return page.evaluate((filename) => {
+const processPage = (pii, page) => {
+  return page.evaluate((pii) => {
     let title = null;
     let titleRoot = document.querySelector("#screen-reader-main-title");
     if (!titleRoot) {
       console.warn(
-        `elem with id 'screen-reader-main-title' not found for ${filename}`
+        `elem with id 'screen-reader-main-title' not found for ${pii}`
       );
       titleRoot = document?.querySelector("h1");
     }
@@ -65,17 +65,15 @@ const processPage = (filename, page) => {
       const titleCont = titleRoot.querySelector(".title-text");
       if (titleCont instanceof HTMLElement) {
         console.info(
-          `extracting title from title container (inner tag) in ${filename}`
+          `extracting title from title container (inner tag) in ${pii}`
         );
         title = titleCont.innerText.trim();
       } else {
-        console.info(
-          `extracting title from title root (outer tag) in ${filename}`
-        );
+        console.info(`extracting title from title root (outer tag) in ${pii}`);
         title = titleRoot.innerText.trim();
       }
     } else {
-      console.error(`could not found title root in ${filename}`);
+      console.error(`could not found title root in ${pii}`);
     }
 
     // Fetch the sub-elements from the previously fetched container element
@@ -178,14 +176,14 @@ const processPage = (filename, page) => {
       highlight,
       abstract,
     };
-  }, filename);
+  }, pii);
 };
 
 /**
- * @param {string[]} filenames
+ * @param {string[]} piis
  * @param {puppeteer.Browser} browser
  */
-const run = async (filenames, browser) => {
+const run = async (piis, browser) => {
   try {
     const page = await browser.newPage();
 
@@ -239,7 +237,7 @@ const run = async (filenames, browser) => {
 
     /**
      * @typedef {object} DataType
-     * @property {string} filename - The unique identifier for the file. Required.
+     * @property {string} pii - The unique identifier for the file. Required.
      * @property {string |null} title - The title of the content. Optional.
      * @property {string | null} abstract - A brief summary or abstract of the content. Optional.
      * @property {string | null} highlight - A specific highlight or key takeaway from the content. Optional.
@@ -250,8 +248,8 @@ const run = async (filenames, browser) => {
      */
     const data = [];
 
-    for (const filename of filenames) {
-      const scienceDirectUri = `https://www.sciencedirect.com/science/article/abs/pii/${filename}`;
+    for (const pii of piis) {
+      const scienceDirectUri = `https://www.sciencedirect.com/science/article/abs/pii/${pii}`;
       const waybackMachineUri = `https://web.archive.org/web/20250512000000/${scienceDirectUri}`;
 
       await page.goto(waybackMachineUri, {
@@ -277,7 +275,7 @@ const run = async (filenames, browser) => {
           // or any other error during the $eval.
           // If the selector is not found, $eval throws. We want to treat this as "no error element found".
           logger.info(
-            `no error element not found on page for file ${filename}, proceeding normally.`
+            `no error element not found on page for file ${pii}, proceeding normally.`
           );
           return false; // No error element found
         });
@@ -286,7 +284,7 @@ const run = async (filenames, browser) => {
         .$eval("#abstracts .author-highlights .list", (el) => el === null)
         .catch((e) => {
           logger.error(
-            `No highlight exists ${filename}, will go to science direct..`
+            `No highlight exists ${pii}, will go to science direct..`
           );
           return true; // No error element found
         });
@@ -295,7 +293,7 @@ const run = async (filenames, browser) => {
         .$eval("#abstracts .author", (el) => el === null)
         .catch((e) => {
           logger.error(
-            `No abstract exists ${filename}, will go to science direct..`
+            `No abstract exists ${pii}, will go to science direct..`
           );
           return true; // No error element found
         });
@@ -304,7 +302,7 @@ const run = async (filenames, browser) => {
 
       if (errorExists || noHighlight || noAbstract) {
         logger.error(
-          `Error detected on the initial page for file ${filename}. Navigating to fallback page.`
+          `Error detected on the initial page for file ${pii}. Navigating to fallback page.`
         );
 
         await page.goto(scienceDirectUri, {
@@ -320,13 +318,13 @@ const run = async (filenames, browser) => {
       }
 
       try {
-        const point = await processPage(filename, page);
+        const point = await processPage(pii, page);
         // logger.info(JSON.stringify(point, null, 4));
-        data.push({ ...point, filename });
+        data.push({ ...point, pii: pii });
       } catch (e) {
-        logger.error(`error while processing page for filename ${filename}`, e);
+        logger.error(`error while processing page for pii ${pii}`, e);
         data.push({
-          filename,
+          pii: pii,
           title: null,
           abstract: null,
           highlight: null,
@@ -385,31 +383,19 @@ const main = async () => {
       database: process.env["PG_DATABASE"],
     });
 
-    const todoRes = await pool.query(
-      `
-    SELECT COUNT(*) AS "TODO"
-    FROM "MixSub"
-    WHERE "Abstract" NOT LIKE '%.'
-      AND (COALESCE(TRIM("BetterAbstract"), '') = '' OR COALESCE(TRIM("BetterHighlight"), '') = '')
-    `
-    );
-
-    const todoCnt = parseInt(todoRes.rows[0]["TODO"]);
-    logger.info(`TOTAL VALUES TO UPDATE :: ${todoCnt}`);
-
     let updtCnt = 0;
     const batchSize = 4;
 
     /**
-     * @type {import("pg").QueryConfig<[number]>}
+     * @type {import("pg").QueryConfig<[number | string]>}
      */
-    const filenameQuery = {
-      name: "fetch-batched-file-names",
+    const piiQuery = {
+      name: "fetch-batched-piis",
       text: `
-      SELECT "Filename"
+      SELECT "PII"
       FROM "MixSub"
-      WHERE "Abstract" NOT LIKE '%.'
-        AND (COALESCE(TRIM("BetterAbstract"), '') = '' OR COALESCE(TRIM("BetterHighlight"), '') = '')
+      WHERE "OriginalAbstract" NOT LIKE '%.'
+        AND ("BetterAbstract" IS NULL OR "BetterHighlight" IS NULL)
       LIMIT $1
       `,
       values: [batchSize],
@@ -425,43 +411,55 @@ const main = async () => {
       SET "Title" = $1,
           "BetterAbstract" = $2,
           "BetterHighlight" = $3
-      WHERE "Filename" = $4;
+      WHERE "PII" = $4;
       `,
     };
+
+    const todoRes = await pool.query(
+      `
+      SELECT COUNT(*) AS "TODO"
+      FROM "MixSub"
+      WHERE "OriginalAbstract" NOT LIKE '%.'
+        AND ("BetterAbstract" IS NULL OR "BetterHighlight" IS NULL)
+      `
+    );
+
+    const todoCnt = parseInt(todoRes.rows[0]["TODO"]);
+    logger.info(`TOTAL VALUES TO UPDATE :: ${todoCnt}`);
 
     while (updtCnt < todoCnt) {
       const client = await pool.connect();
 
-      const res = await client.query(filenameQuery);
+      const res = await client.query(piiQuery);
 
       /**
        * @type {string[]}
        */
-      const filenames = res.rows.map((r) => r["Filename"]);
-      if (filenames.length == 0) {
+      const piis = res.rows.map((r) => r["PII"]);
+      if (piis.length == 0) {
         // we are breaking using update count, but this is just extra protection
-        logger.info("breaking as filenames count is zero");
+        logger.info("breaking as piis count is zero");
         break;
       }
 
       try {
         logger.info(
-          `batch started at ${getIndianTime()} with contents ${filenames}`
+          `batch started at ${getIndianTime()} with contents ${piis}`
         );
 
-        const data = await run(filenames, browser);
+        const data = await run(piis, browser);
 
         logger.info(JSON.stringify(data, null, 4));
 
-        for (let i = 0; i < filenames.length; ++i) {
+        for (let i = 0; i < piis.length; ++i) {
           if (!data[i].abstract) {
-            logger.error(`found abstract to be falsy for ${filenames[i]}`);
-            data[i].abstract = "NOT_AVAILABLE";
+            logger.error(`found abstract to be falsy for ${piis[i]}`);
+            data[i].abstract = ""; // do not set to null, set to empty string
           }
 
           if (!data[i].highlight) {
-            logger.error(`found highlight to be falsy for ${filenames[i]}`);
-            data[i].highlight = "NOT_AVAILABLE";
+            logger.error(`found highlight to be falsy for ${piis[i]}`);
+            data[i].highlight = ""; // do not set to null, set to empty string
           }
 
           try {
@@ -471,21 +469,21 @@ const main = async () => {
                 data[i].title, //
                 data[i].abstract,
                 data[i].highlight,
-                filenames[i],
+                piis[i],
               ]
             );
           } catch (e) {
-            logger.error("could not update for filename", filenames[i]);
+            logger.error("could not update for pii", piis[i]);
           } finally {
             updtCnt += 1;
           }
         }
 
         logger.info(
-          `batch finished at ${getIndianTime()} with contents ${filenames}`
+          `batch finished at ${getIndianTime()} with contents ${piis}`
         );
       } catch (e) {
-        logger.error("error occurred for batch", filenames, e);
+        logger.error("error occurred for batch", piis, e);
       }
 
       client.release();

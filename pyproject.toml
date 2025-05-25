@@ -32,6 +32,9 @@ dependencies = [
     "unsloth-zoo>=2025.4.4",
     "torch>=2.7",
     "triton>=3.3.0",
+    "codecarbon>=2.7.1",
+    "tensorboardx>=2.6.2.2",
+    "tensorboard>=2.19.0",
 ]
 
 [project.optional-dependencies]
