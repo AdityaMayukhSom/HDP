@@ -3,16 +3,17 @@ import json
 from dotenv import dotenv_values
 from google import genai
 
-config = dotenv_values()
-client = genai.Client(api_key=config["GEMINI_API_KEY"])
-
 
 def generate_hallucinated_highlights(
     instruction: str,
     abstract: str,
     highlight: str,
+    client: genai.Client,
 ) -> dict[str, str]:
-    dat = {"Document": abstract, "CorrectSummary": highlight}
+    dat = {
+        "Document": abstract,
+        "CorrectSummary": highlight,
+    }
 
     mes = f"{instruction}\n\n{json.dumps(dat, indent=4)}".strip()
 
@@ -29,6 +30,7 @@ def generate_hallucinated_highlights(
 
 if __name__ == "__main__":
     config = dotenv_values(dotenv_path=".env", verbose=True, encoding="utf-8")
+    client = genai.Client(api_key=config["GEMINI_API_KEY"])
 
     with (
         open("./scripts/instruction/gemini.txt", "r", encoding="utf-8") as ins_file,
@@ -39,6 +41,7 @@ if __name__ == "__main__":
             ins_file.read(),
             abs_file.read(),
             hlt_file.read(),
+            client,
         )
 
     with open("./scripts/example/message.txt", "w", encoding="utf-8") as mes_file:
