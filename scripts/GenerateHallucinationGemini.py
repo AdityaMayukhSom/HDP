@@ -1,10 +1,24 @@
 import json
+import os
 import pathlib
+import sys
+import time
 
 import sqlalchemy as sa
 from dotenv import dotenv_values
 from google import genai
 from loguru import logger
+
+os.environ["TZ"] = "Asia/Kolkata"
+time.tzset()
+
+logger.add(
+    "./logs/gemini/outputfile_{time:YYYY_MM_DD_hh_mm}.log",
+    colorize=False,
+    backtrace=True,
+    diagnose=True,
+    rotation="1 MB",
+)
 
 
 def generate_hallucinated_highlight(
@@ -27,14 +41,18 @@ def generate_hallucinated_highlight(
 
     return {
         "Message": mes,
-        "HallucinatedHighlight": res.text,
+        "HallucinatedHighlight": " ".join(res.text.split("\n")),
     }
 
 
-if __name__ == "__main__":
+def main(argv: list[str]):
     config = dotenv_values(dotenv_path=".env", verbose=True, encoding="utf-8")
-    keys = config["GEMINI_API_KEY"].split(",")
-    clients = [genai.Client(key.strip()) for key in keys]
+    keys = list(
+        filter(
+            lambda x: x.strip() != "",
+            pathlib.Path("keys.txt").read_text(encoding="utf-8").strip().split("\n"),
+        )
+    )
 
     conn_url = sa.URL.create(
         drivername="postgresql+psycopg2",
@@ -50,15 +68,19 @@ if __name__ == "__main__":
 
     with engine.connect() as conn:
         todo_query = sa.text(
-            'SELECT COUNT(*) AS "TODO" FROM "MixSubView" WHERE "HallucinatedHighlight" IS NOT NULL'
+            'SELECT COUNT(*) AS "TODO" FROM "MixSubView" WHERE "HallucinatedHighlight" IS NULL'
         )
-        res = conn.execute(todo_query).fetchone()
+        res = conn.execute(todo_query).mappings().fetchone()
         todo_cnt = int(res["TODO"])
 
-        logger.info(f"todo: generate hallucinated highlight for {todo_cnt} datapoints")
+        logger.info(f"TODO: generate hallucinated highlight for {todo_cnt} datapoints")
 
         extract_query = sa.text(
-            'SELECT * FROM "MixSubView" WHERE "HallucinatedHighlight" IS NOT NULL LIMIT :limit'
+            """
+            SELECT * FROM "MixSubView" 
+            WHERE "HallucinatedHighlight" IS NULL 
+            LIMIT :limit
+            """
         )
 
         updt_query = sa.text(
@@ -70,28 +92,52 @@ if __name__ == "__main__":
         )
 
         updt_cnt = 0
+        clients = [genai.Client(api_key=key.strip()) for key in keys]
 
         while updt_cnt < todo_cnt:
-            res = conn.execute(extract_query, {"limit": len(clients)})
+            res = conn.execute(extract_query, {"limit": len(clients)}).mappings()
             data = res.fetchall()
 
+            piis = [d["PII"] for d in data]
+            logger.info(f"starting batch with count {len(data)} and values {piis}")
+
             for i, d in enumerate(data):
-                hal = generate_hallucinated_highlight(
-                    instr,
-                    d["ArticleAbstract"],
-                    d["CorrectHighlight"],
-                    clients[i % len(clients)],
+                pii = d["PII"]
+                abstract = d["ArticleAbstract"]
+                correct = d["CorrectHighlight"]
+                hallucinated = ""
+
+                try:
+                    res = generate_hallucinated_highlight(
+                        instr,
+                        abstract,
+                        correct,
+                        clients[i % len(clients)],
+                    )
+
+                    hallucinated = res["HallucinatedHighlight"]
+                except Exception as e:
+                    logger.error(str(e))
+
+                logger.info(
+                    f"\nPII: {pii} ------------------\nCorrect Summary:\n{correct}\nHallucinated Summary:\n{hallucinated}\n"
                 )
 
                 conn.execute(
                     updt_query,
                     {
-                        "hallucinated_highlight": hal["HallucinatedHighlight"],
-                        "pii": d["PII"],
+                        "pii": pii,
+                        "hallucinated_highlight": hallucinated,
                     },
                 )
 
+                conn.commit()
+
                 updt_cnt += 1
+
+                time.sleep(1)
+
+    logger.success("finished generating hallucinated highlights")
 
     # with (
     #     open("./scripts/instruction/gemini.txt", "r", encoding="utf-8") as ins_file,
@@ -110,3 +156,7 @@ if __name__ == "__main__":
 
     # with open("./scripts/instruction/oneturn.json", "r", encoding="utf-8") as f:
     #     instruction = json.load(f)
+
+
+if __name__ == "__main__":
+    main(sys.argv)

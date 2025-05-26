@@ -228,12 +228,30 @@ FROM "MixSub"
 OFFSET 55
 LIMIT 30;
 
+-- UPDATE "MixSub"
+-- SET "HallucinatedHighlight" = NULL
+-- WHERE "PII" = 'S0009279720313363';
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE COALESCE(TRIM("HallucinatedHighlight"), '') != '';
+
 
 SELECT *
 FROM "MixSub"
-WHERE "PII" = 'S2589721723000302';
+WHERE "PII" = 'S0009279720313363';
 
 
-SELECT *
+SELECT COUNT(*)
 FROM "MixSub"
-WHERE "PII" = 'S2589721723000302';
+WHERE "HallucinatedHighlight" = '';
+
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE "HallucinatedHighlight" IS NULL;
+
+
+UPDATE "MixSub"
+SET "HallucinatedHighlight" = NULL
+WHERE "HallucinatedHighlight" = '';

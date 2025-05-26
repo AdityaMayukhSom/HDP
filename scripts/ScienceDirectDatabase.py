@@ -1,9 +1,14 @@
+import os
+import time
 from typing import Literal
 
 import pandas as pd
 import sqlalchemy
 from datasets import DatasetDict, load_dataset
 from dotenv import dotenv_values
+
+os.environ["TZ"] = "Asia/Kolkata"
+time.tzset()
 
 
 def init_mixsub_database(engine: sqlalchemy.Engine):
