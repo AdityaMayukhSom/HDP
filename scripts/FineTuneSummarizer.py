@@ -78,9 +78,11 @@ def prepare_mixsub(
         val_df = pd.read_sql(extract_query, conn, params={"split": "VALIDATION"})
         tst_df = pd.read_sql(extract_query, conn, params={"split": "TEST"})
 
-    print("train dataframe null", trn_df.isnull().sum().sum())
-    print("validation dataframe null", val_df.isnull().sum().sum())
-    print("test dataframe null", tst_df.isnull().sum().sum())
+    # print("train dataframe null", trn_df.isnull().sum().sum())
+    # print("validation dataframe null", val_df.isnull().sum().sum())
+    # print("test dataframe null", tst_df.isnull().sum().sum())
+
+    trn_df = pd.concat([trn_df, val_df, tst_df], ignore_index=True)
 
     trn_ds = Dataset.from_pandas(trn_df)
     val_ds = Dataset.from_pandas(val_df)
@@ -249,11 +251,11 @@ def main(argv: list[str]):
             num_train_epochs=int(
                 config["MODEL_EPOCHS"]
             ),  # Set this to 1 for one full training run
-            warmup_steps=512,
+            warmup_steps=256,
             eval_strategy="epoch",
             save_strategy="steps",
             save_steps=512,
-            learning_rate=0.0004,
+            learning_rate=0.0002,
             fp16=not is_bfloat16_supported(),
             bf16=is_bfloat16_supported(),
             optim="adamw_8bit",
@@ -265,7 +267,7 @@ def main(argv: list[str]):
             logging_steps=1,
             # load_best_model_at_end=True,
             # push_to_hub=True,
-            hub_model_id=f"{config['HF_TRAINED_MODEL_ACNT']}/{config['HF_TRAINED_MODEL_NAME']}",
+            hub_model_id=config["HF_TRAINED_MODEL_REPO"],
         ),
     )
 
@@ -320,9 +322,7 @@ def main(argv: list[str]):
     # print(f"Peak reserved memory % of max memory = {used_percentage} %.")
     # print(f"Peak reserved memory for training % of max memory = {lora_percentage} %.")
 
-    model.save_pretrained(
-        save_directory=f"{config['HF_TRAINED_MODEL_NAME']}-SaveDirectory"
-    )
+    model.save_pretrained(save_directory=f"{config['MODEL_PRETRAINED_DIR']}")
 
     trainer.push_to_hub(
         commit_message=f"finished finetuning till {int(config['MODEL_EPOCHS'])} epochs",

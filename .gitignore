@@ -5,7 +5,7 @@
 **/*.parquet
 **/*.arrow
 certs*/
-./public/*
+public/
 **/.env
 **/unsloth_compiled_cache/
 data/*
@@ -13,10 +13,10 @@ data/*
 names.txt
 crawl/log/*
 Llama-3.2-1B-Instruct-HyperMixSub
-finetuned/
+checkpoints/
 scripts/example/abstract.txt
 scripts/example/highlight.txt
 scripts/example/message.txt
 logs/
 emissions/
-Llama-3.2-1B-Instruct-HyperMixSub-SaveDirectory
+pretrained/

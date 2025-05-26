@@ -72,17 +72,6 @@ if __name__ == "__main__":
         compresslevel=5,
     )
 
-    # app.mount(
-    #     path="/",
-    #     app=StaticFiles(
-    #         directory="public",
-    #         check_dir=False,
-    #         follow_symlink=True,
-    #         html=True,
-    #     ),
-    #     name="public",
-    # )
-
     # ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     # ssl_context.load_cert_chain(
     #     certfile="/etc/ssl/certs/apache-selfsigned.crt",

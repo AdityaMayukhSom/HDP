@@ -225,10 +225,15 @@ drop not null;
 
 SELECT *
 FROM "MixSub"
+OFFSET 55
+LIMIT 30;
+
+
+SELECT *
+FROM "MixSub"
 WHERE "PII" = 'S2589721723000302';
 
 
-UPDATE "MixSub"
-SET "BetterAbstract" = NULL,
-    "OriginalAbstract" = 'Modern pig farming leaves much to be desired in terms of efficiency, as these systems rely mainly on electromechanical controls and can only categorize pigs according to their weight. This method is not only inefficient but also escalates labor expenses and heightens the threat of zoonotic diseases. Furthermore, confining pigs in large groups can exacerbate the spread of infections and complicate the monitoring and care of ill pigs. This research executed an experiment to construct a deep-learning sorting mechanism, leveraging a dataset infused with pivotal metrics and breeding imagery gathered over 24 months. This research integrated a Kalman filter-based algorithm to augment the precision of the dynamic sorting operation. This research experiment unveiled a pioneering machine vision sorting system powered by deep learning, adept at handling live imagery for multifaceted recognition objectives. The Individual recognition model based on Residual Neural Network'
+SELECT *
+FROM "MixSub"
 WHERE "PII" = 'S2589721723000302';
