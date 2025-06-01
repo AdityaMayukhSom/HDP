@@ -25,7 +25,7 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "scrapy>=2.13.0",
     "openpyxl>=3.1.5",
-    "spacy>=3.8.6",
+    "spacy[cuda12x]>=3.8.6",
     "google-genai>=1.16.1",
     "transformers[torch]>=4.51",
     "unsloth>=2025.4.7",
@@ -35,6 +35,11 @@ dependencies = [
     "codecarbon>=2.7.1",
     "tensorboardx>=2.6.2.2",
     "tensorboard>=2.19.0",
+    "pip>=25.1.1",
+    "wheel>=0.45.1",
+    "spacy-llm>=0.7.3",
+    "flair>=0.15.1",
+    "tf-keras>=2.15.0",
 ]
 
 [project.optional-dependencies]

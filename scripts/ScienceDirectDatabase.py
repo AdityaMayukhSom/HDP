@@ -11,11 +11,11 @@ os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
 
 
-def init_mixsub_database(engine: sqlalchemy.Engine):
-    DatasetDictKeys = Literal["train", "validation", "test"]
-
+def load_mix_sub_into_database(engine: sqlalchemy.Engine):
     # https://huggingface.co/docs/datasets/en/loading#hugging-face-hub
-    ds: DatasetDict[DatasetDictKeys] = load_dataset("TRnlp/MixSub")
+    ds: DatasetDict[Literal["train", "validation", "test"]] = load_dataset(
+        "TRnlp/MixSub"
+    )
 
     # Changing all the column names to have uniform singular forms
     # All column names are now in singular form
@@ -65,7 +65,7 @@ def store_piis(engine: sqlalchemy.Engine):
 
     with (
         engine.connect() as conn,
-        open("./scripts/names.txt", "r", encoding="utf-8") as f,
+        open("./data/sciencedirect.txt", "r", encoding="utf-8") as f,
     ):
         prefix = "https://www.sciencedirect.com/science/article/pii/"
 

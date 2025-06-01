@@ -10,14 +10,13 @@ public/
 **/unsloth_compiled_cache/
 data/*
 **/node_moduless
-names.txt
 crawl/log/*
 Llama-3.2-1B-Instruct-HyperMixSub
 checkpoints/
-scripts/example/abstract.txt
-scripts/example/highlight.txt
-scripts/example/message.txt
+data/
 logs/
 emissions/
 pretrained/
 keys.txt
+.idea
+.vscode

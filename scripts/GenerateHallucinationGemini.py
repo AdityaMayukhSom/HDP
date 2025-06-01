@@ -2,6 +2,7 @@ import json
 import os
 import pathlib
 import sys
+import threading
 import time
 
 import sqlalchemy as sa
@@ -21,28 +22,117 @@ logger.add(
 )
 
 
+def generate_gemini_prompt(
+    instruction: str,
+    abstract: str,
+    correct_highlight: str,
+):
+    dat = {
+        "Document": abstract,
+        "CorrectHighlight": correct_highlight,
+    }
+
+    prompt = f"{instruction}\n\n{json.dumps(dat, indent=4)}".strip()
+    return prompt
+
+
 def generate_hallucinated_highlight(
     instruction: str,
     abstract: str,
     correct_highlight: str,
     client: genai.Client,
 ) -> dict[str, str]:
-    dat = {
-        "Document": abstract,
-        "CorrectHighlight": correct_highlight,
-    }
-
-    mes = f"{instruction}\n\n{json.dumps(dat, indent=4)}".strip()
+    prompt = generate_gemini_prompt(instruction, abstract, correct_highlight)
 
     res = client.models.generate_content(
         model="gemini-2.0-flash",
-        contents=mes,
+        contents=prompt,
     )
 
     return {
-        "Message": mes,
         "HallucinatedHighlight": " ".join(res.text.split("\n")),
     }
+
+
+def extract_and_save(key: str, instr: str, engine: sa.Engine):
+    logger.info(f"called extract and save for key {key}")
+    client = genai.Client(api_key=key)
+
+    extract_query = sa.text(
+        """
+        SELECT * FROM "MixSubView" 
+        WHERE "HallucinatedHighlight" IS NULL
+        FETCH FIRST ROW ONLY
+        FOR UPDATE SKIP LOCKED
+        """
+    )
+
+    updt_query = sa.text(
+        """
+        UPDATE "MixSub" 
+        SET "HallucinatedHighlight" = :hallucinated_highlight 
+        WHERE "PII" = :pii
+        """
+    )
+
+    updt_cnt = 0
+    unit_delay = 180
+
+    with engine.connect() as conn:
+        while True:
+            try:
+                res = conn.execute(extract_query).mappings()
+                d = res.fetchone()
+
+                if d is None:
+                    break
+
+                pii = d["PII"]
+                abstract = d["ArticleAbstract"]
+                correct = d["CorrectHighlight"]
+                hallucinated = ""
+            except Exception as e:
+                logger.error(f"\nError with key {key} during fetch\n{str(e)}")
+                break
+
+            logger.info(f"starting extraction for {pii}")
+
+            try:
+                res = generate_hallucinated_highlight(
+                    instr,
+                    abstract,
+                    correct,
+                    # modulus is unnecessary, as we only extract
+                    client,
+                )
+
+                hallucinated = res["HallucinatedHighlight"]
+
+                conn.execute(
+                    updt_query,
+                    {
+                        "pii": pii,
+                        "hallucinated_highlight": hallucinated,
+                    },
+                )
+
+                updt_cnt += 1
+                logger.success(
+                    f"\nPII: {pii}\n\nCorrect Summary:\n{correct}\n\nHallucinated Summary:\n{hallucinated}\n\nStatus: SUCCESS\nSleeping for {unit_delay} seconds..."
+                )
+            except Exception as e:
+                logger.error(f"\nError with key {key}\n{str(e)}")
+                logger.warning(
+                    f"PII: {pii},Status: FAILED, Sleep {unit_delay} seconds."
+                )
+            finally:
+                conn.commit()
+
+            time.sleep(unit_delay)
+
+    logger.success(
+        f"finished generating hallucinated highlights for key {key} with update count {updt_cnt}"
+    )
 
 
 def main(argv: list[str]):
@@ -54,6 +144,8 @@ def main(argv: list[str]):
         )
     )
 
+    keys = set(keys)
+
     conn_url = sa.URL.create(
         drivername="postgresql+psycopg2",
         username=config["PG_USERNAME"],
@@ -63,8 +155,10 @@ def main(argv: list[str]):
         port=int(config["PG_PORT"]),
     )
 
-    instr = pathlib.Path("./scripts/instruction/gemini.txt").read_text(encoding="utf-8")
-    engine = sa.create_engine(conn_url)
+    instr = pathlib.Path("./scripts/instructions/gemini.txt").read_text(
+        encoding="utf-8"
+    )
+    engine = sa.create_engine(conn_url, pool_size=128, max_overflow=256)
 
     with engine.connect() as conn:
         todo_query = sa.text(
@@ -75,87 +169,31 @@ def main(argv: list[str]):
 
         logger.info(f"TODO: generate hallucinated highlight for {todo_cnt} datapoints")
 
-        extract_query = sa.text(
-            """
-            SELECT * FROM "MixSubView" 
-            WHERE "HallucinatedHighlight" IS NULL 
-            LIMIT :limit
-            """
-        )
+    ts = [
+        threading.Thread(target=extract_and_save, args=(key, instr, engine))
+        for key in keys
+    ]
 
-        updt_query = sa.text(
-            """
-            UPDATE "MixSub" 
-            SET "HallucinatedHighlight" = :hallucinated_highlight 
-            WHERE "PII" = :pii
-            """
-        )
+    for t in ts:
+        t.start()
 
-        updt_cnt = 0
-        clients = [genai.Client(api_key=key.strip()) for key in keys]
+    for t in ts:
+        t.join()
 
-        while updt_cnt < todo_cnt:
-            res = conn.execute(extract_query, {"limit": len(clients)}).mappings()
-            data = res.fetchall()
-
-            piis = [d["PII"] for d in data]
-            logger.info(f"starting batch with count {len(data)} and values {piis}")
-
-            for i, d in enumerate(data):
-                pii = d["PII"]
-                abstract = d["ArticleAbstract"]
-                correct = d["CorrectHighlight"]
-                hallucinated = ""
-
-                try:
-                    res = generate_hallucinated_highlight(
-                        instr,
-                        abstract,
-                        correct,
-                        clients[i % len(clients)],
-                    )
-
-                    hallucinated = res["HallucinatedHighlight"]
-                except Exception as e:
-                    logger.error(str(e))
-
-                logger.info(
-                    f"\nPII: {pii} ------------------\nCorrect Summary:\n{correct}\nHallucinated Summary:\n{hallucinated}\n"
-                )
-
-                conn.execute(
-                    updt_query,
-                    {
-                        "pii": pii,
-                        "hallucinated_highlight": hallucinated,
-                    },
-                )
-
-                conn.commit()
-
-                updt_cnt += 1
-
-                time.sleep(1)
-
-    logger.success("finished generating hallucinated highlights")
+    logger.success("finished hallucinated highlight generation")
 
     # with (
-    #     open("./scripts/instruction/gemini.txt", "r", encoding="utf-8") as ins_file,
-    #     open("./scripts/example/abstract.txt", "r", encoding="utf-8") as abs_file,
-    #     open("./scripts/example/highlight.txt", "r", encoding="utf-8") as hlt_file,
+    #     open("./instructions/gemini.txt", "r", encoding="utf-8") as instruction_file,
+    #     open("./data/example-abstract.txt", "r", encoding="utf-8") as abstract_file,
+    #     open("./data/example-highlight.txt", "r", encoding="utf-8") as highlight_file,
+    #     open("./data/gemini-prompt.txt", "w", encoding="utf-8") as prompt_file,
     # ):
-    #     hal = generate_hallucinated_highlight(
-    #         ins_file.read(),
-    #         abs_file.read(),
-    #         hlt_file.read(),
-    #         client,
+    #     prompt = generate_hallucinated_highlight(
+    #         instruction=instruction_file.read(),
+    #         abstract=abstract_file.read(),
+    #         correct_highlight=highlight_file.read(),
     #     )
-
-    # with open("./scripts/example/message.txt", "w", encoding="utf-8") as mes_file:
-    #     mes_file.write(hal["Message"])
-
-    # with open("./scripts/instruction/oneturn.json", "r", encoding="utf-8") as f:
-    #     instruction = json.load(f)
+    #     prompt_file.write(prompt)
 
 
 if __name__ == "__main__":

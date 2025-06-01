@@ -1,7 +1,9 @@
 import torch
+from transformers import LlamaForCausalLM, PreTrainedTokenizerFast  # isort:skip
 from unsloth import FastLanguageModel, is_bfloat16_supported
 
 from src.config import Config
+from src.prompt import eval_summarizer_row_json_single_example
 
 
 def get_summarizer_model_tokenizer():
@@ -19,24 +21,15 @@ def get_summarizer_model_tokenizer():
     return model, tokenizer
 
 
-def generate_highlight(abstract: str, model, tokenizer):
-    device = torch.device(Config.DEVICE)
-
+def generate_highlight(
+    abstract: str,
+    model: LlamaForCausalLM,
+    tokenizer: PreTrainedTokenizerFast,
+):
     init_identifier = "<|start_header_id|>assistant<|end_header_id|>"
     term_identifier = "<|eot_id|>"
 
-    batch_data = [
-        [
-            {
-                "role": "system",
-                "content": Config.SUMMARIZER_INSTRUCTION,
-            },
-            {
-                "role": "user",
-                "content": abstract,
-            },
-        ]
-    ]
+    batch_data = [eval_summarizer_row_json_single_example(abstract)]
 
     inputs = tokenizer.apply_chat_template(
         batch_data,
@@ -46,7 +39,7 @@ def generate_highlight(abstract: str, model, tokenizer):
         truncation=True,
         return_tensors="pt",
         return_dict=True,
-    ).to(device)
+    ).to(Config.DEVICE)
 
     outputs = model.generate(
         **inputs,
@@ -56,10 +49,11 @@ def generate_highlight(abstract: str, model, tokenizer):
     )
 
     decoded_texts = tokenizer.batch_decode(
-        outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=False
+        outputs[:, inputs.input_ids.shape[1] :],
+        skip_special_tokens=False,
     )
 
-    # the generaed output contains the prompt, init identifier, generated highlight and term identifier
+    # the generated output contains the prompt, init identifier, generated highlight and term identifier
     # the following code splits the output with init identifier, takes the second section which contains
     # the generated highlight followed by term identifier, now splits the second section based on term
     # identifier, takes the first section, which contains only the generated output. Then it strips the

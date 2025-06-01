@@ -204,6 +204,18 @@ SELECT "PII",
 FROM "MixSub";
 
 
+ALTER TABLE "MixSub" ADD COLUMN "ModelGeneratedHighlight" TEXT;
+
+
+ALTER TABLE "MixSub" ADD COLUMN "AbstractEntities" JSONB;
+
+
+ALTER TABLE "MixSub" ADD COLUMN "CorrectHighlightEntities" JSONB;
+
+
+ALTER TABLE "MixSub" ADD COLUMN "HallucinatedHighlightEntities" JSONB;
+
+
 SELECT COUNT(*)
 FROM "MixSubView";
 
@@ -228,9 +240,44 @@ FROM "MixSub"
 OFFSET 55
 LIMIT 30;
 
--- UPDATE "MixSub"
--- SET "HallucinatedHighlight" = NULL
--- WHERE "PII" = 'S0009279720313363';
+
+UPDATE "MixSub"
+SET "HallucinatedHighlight" = NULL
+WHERE "PII" = 'S1369527420301065';
+
+
+SELECT COUNT(*)
+FROM "MixSub"
+WHERE "HallucinatedHighlight" = '';
+
+
+SELECT *
+FROM "MixSubView"
+WHERE "CorrectHighlight" LIKE '%Markov%';
+
+
+SELECT "HallucinatedHighlight"
+FROM "MixSubView"
+WHERE "PII" = 'S1537511020302440';
+
+
+SELECT t.relname,
+       l.locktype,
+       page,
+       virtualtransaction,
+       pid,
+       mode,
+       granted
+FROM pg_locks l,
+     pg_stat_all_tables t
+WHERE l.relation = t.relid
+ORDER BY relation asc;
+
+
+UPDATE "MixSub"
+SET "HallucinatedHighlight" = NULL
+WHERE "HallucinatedHighlight" = '';
+
 
 SELECT COUNT(*)
 FROM "MixSub"
@@ -239,7 +286,7 @@ WHERE COALESCE(TRIM("HallucinatedHighlight"), '') != '';
 
 SELECT *
 FROM "MixSub"
-WHERE "PII" = 'S0009279720313363';
+WHERE "PII" = 'S0968090X19311118';
 
 
 SELECT COUNT(*)
