@@ -1,17 +1,22 @@
 import os
+import sys
 import time
+from pathlib import Path
 from typing import Literal
 
 import pandas as pd
-import sqlalchemy
+import sqlalchemy as sa
 from datasets import DatasetDict, load_dataset
-from dotenv import dotenv_values
+from loguru import logger
+
+sys.path.append(str(Path(__file__).parent.parent))
+from src.utils import get_postgresql_engine
 
 os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
 
 
-def load_mix_sub_into_database(engine: sqlalchemy.Engine):
+def load_mix_sub_into_database(engine: sa.Engine):
     # https://huggingface.co/docs/datasets/en/loading#hugging-face-hub
     ds: DatasetDict[Literal["train", "validation", "test"]] = load_dataset(
         "TRnlp/MixSub"
@@ -34,7 +39,7 @@ def load_mix_sub_into_database(engine: sqlalchemy.Engine):
         tst_ds.to_sql("MixSub", conn, if_exists="append")
 
 
-def extract_broken_abstracts(engine: sqlalchemy.Engine):
+def extract_broken_abstracts(engine: sa.Engine):
     query = """
     SELECT
       "PII",
@@ -58,8 +63,8 @@ def extract_broken_abstracts(engine: sqlalchemy.Engine):
         df.to_excel(writer, sheet_name="MixSub", index=False)
 
 
-def store_piis(engine: sqlalchemy.Engine):
-    stmt = sqlalchemy.text(
+def store_piis(engine: sa.Engine):
+    stmt = sa.text(
         'INSERT INTO "MixSub" ("PII", "Split") VALUES (:pii, :split) ON CONFLICT DO NOTHING'
     )
 
@@ -67,7 +72,8 @@ def store_piis(engine: sqlalchemy.Engine):
         engine.connect() as conn,
         open("./data/sciencedirect.txt", "r", encoding="utf-8") as f,
     ):
-        prefix = "https://www.sciencedirect.com/science/article/pii/"
+        prefix_1 = "https://www.sciencedirect.com/science/article/pii/"
+        prefix_2 = "https://www.sciencedirect.com/science/article/abs/pii/"
 
         pii_params = []
 
@@ -80,36 +86,36 @@ def store_piis(engine: sqlalchemy.Engine):
             # to handle bullet names
             pii = line.split()[-1].strip()
 
-            if pii.startswith(prefix):
-                pii = pii.strip(prefix)
+            if pii.startswith(prefix_1):
+                pii = pii.strip(prefix_1)
+            elif pii.startswith(prefix_2):
+                pii = pii.strip(prefix_2)
 
-            param = {
-                "pii": pii.strip(),
-                "split": "TRAIN",
-            }
+            pii = pii.strip()
 
-            pii_params.append(param)
+            if len(pii) != 17:
+                logger.error(f"PII length not 17 : {pii}")
+            else:
+                param = {
+                    "pii": pii,
+                    "split": "TRAIN",
+                }
+
+                pii_params.append(param)
 
         conn.execute(stmt, pii_params)
         conn.commit()
 
 
-if __name__ == "__main__":
-    config = dotenv_values(".env")
+def main():
+    engine = get_postgresql_engine()
 
-    conn_url = sqlalchemy.URL.create(
-        drivername="postgresql+psycopg2",
-        username=config["PG_USERNAME"],
-        password=config["PG_PASSWORD"],
-        host=config["PG_HOST"],
-        database=config["PG_DATABASE"],
-        port=int(config["PG_PORT"]),
-    )
-
-    engine = sqlalchemy.create_engine(conn_url)
-
-    # init_mixsub_database(engine)
+    # load_mix_sub_into_database(engine)
     # extract_broken_abstracts(engine)
     store_piis(engine)
 
     engine.dispose()
+
+
+if __name__ == "__main__":
+    main()

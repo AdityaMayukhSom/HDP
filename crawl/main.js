@@ -79,6 +79,47 @@ const getIndianTime = () => {
 };
 
 /**
+ * Removes all invisible characters from a string, preserves ASCII special characters,
+ * and replaces various Unicode dash-like characters with a plain ASCII hyphen-minus.
+ *
+ * @param {string} text The input string, which can contain any Unicode characters.
+ * @returns {string} The cleaned string.
+ */
+function cleanStringRemoveInvisibleChars(text) {
+  if (typeof text !== "string") {
+    throw new TypeError("Input must be a string.");
+  }
+
+  if (text.trim().length === 0) {
+    return "";
+  }
+
+  // Step 1: Replace various Unicode dash-like characters with a plain ASCII hyphen-minus (-)
+  // This regex covers common Unicode dashes, hyphens, and minus signs.
+  // U+2010 (HYPHEN), U+2011 (NON-BREAKING HYPHEN), U+2012 (FIGURE DASH),
+  // U+2013 (EN DASH), U+2014 (EM DASH), U+2015 (HORIZONTAL BAR),
+  // U+2212 (MINUS SIGN)
+  let processedText = text.replace(/[\u2010-\u2015\u2212]/g, "-");
+
+  // Step 2: Remove invisible characters.
+  // This regex targets:
+  // - ASCII control characters (0x00-0x1F, 0x7F)
+  // - Unicode control/formatting characters (various ranges, including zero-width spaces,
+  //   soft hyphens, byte order marks, etc.)
+  // It explicitly does not remove printable ASCII characters (0x20-0x7E),
+  // which includes all standard letters, numbers, and special symbols like !@#$%^&*()
+  // It also preserves common whitespace characters like \n, \r, \t.
+  const invisibleCharsPattern = new RegExp(
+    "[\x00-\x1F\x7F]" + // ASCII control characters and DEL
+      "|[\u00ad\u034f\u17b4\u17b5\u180e\u200b-\u200f\u2028-\u202f\u2060-\u2064\u206a-\u206f\ufeff\ufff9-\ufffc]",
+    "g" // Global flag to replace all occurrences
+  );
+  processedText = processedText.replace(invisibleCharsPattern, "");
+
+  return processedText;
+}
+
+/**
  *
  * @typedef {object} MongoUrlOptions
  * @property {string} [username] - The unique identifier for the file. Required.
@@ -247,8 +288,9 @@ const processPage = (pii, page) => {
 /**
  * @param {string[]} piis
  * @param {puppeteer.Browser} browser
+ * @param {boolean} directlyFromSD
  */
-const scrapDataFromPIIs = async (piis, browser) => {
+const scrapDataFromPIIs = async (piis, browser, directlyFromSD = false) => {
   try {
     const page = await browser.newPage();
 
@@ -294,69 +336,77 @@ const scrapDataFromPIIs = async (piis, browser) => {
       const scienceDirectUri = `https://www.sciencedirect.com/science/article/abs/pii/${pii}`;
       const waybackMachineUri = `https://web.archive.org/web/20250512000000/${scienceDirectUri}`;
 
-      await page.goto(waybackMachineUri, {
-        referer: "https://www.google.com/",
-        waitUntil: "networkidle2",
-      });
+      let errorInWaybackMachine = false;
 
-      // CAPTCHA handling: If you're expecting a CAPTCHA on the target page, use the following code snippet to check the status of Browser API's automatic CAPTCHA solver
-      // const client = await page.createCDPSession();
-      // console.log('Waiting captcha to solve...');
-      // const { status } = await client.send('Captcha.waitForSolve', {
-      //   detectTimeout: 10000,
-      // });
-      // console.log('Captcha solve status:', status);
-      // await page.waitForSelector("#abstracts", {
-      //   timeout: 2000,
-      // });
+      if (!directlyFromSD) {
+        await page.goto(waybackMachineUri, {
+          referer: "https://www.google.com/",
+          waitUntil: "networkidle2",
+        });
 
-      const errorExists = await page
-        .$eval("#errorBorder #error, .error-card", (el) => el !== null)
-        .catch((e) => {
-          // This catch block handles the case where the selector #errorBorder #error is not found at all
-          // or any other error during the $eval.
-          // If the selector is not found, $eval throws. We want to treat this as "no error element found".
+        // CAPTCHA handling: If you're expecting a CAPTCHA on the target page, use the following code snippet to check the status of Browser API's automatic CAPTCHA solver
+        // const client = await page.createCDPSession();
+        // console.log('Waiting captcha to solve...');
+        // const { status } = await client.send('Captcha.waitForSolve', {
+        //   detectTimeout: 10000,
+        // });
+        // console.log('Captcha solve status:', status);
+        // await page.waitForSelector("#abstracts", {
+        //   timeout: 2000,
+        // });
+
+        const errorExists = await page
+          .$eval("#errorBorder #error, .error-card", (el) => el !== null)
+          .catch((e) => {
+            // This catch block handles the case where the selector #errorBorder #error is not found at all
+            // or any other error during the $eval.
+            // If the selector is not found, $eval throws. We want to treat this as "no error element found".
+            logger.info(
+              `no error element not found on page for file ${pii}, proceeding normally.`
+            );
+            return false; // No error element found
+          });
+
+        const noHighlight = await page
+          .$eval("#abstracts .author-highlights .list", (el) => el === null)
+          .catch((e) => {
+            logger.error(
+              `No highlight exists ${pii}, will go to science direct..`
+            );
+            return true; // No error element found
+          });
+
+        const noAbstract = await page
+          .$eval("#abstracts .author", (el) => el === null)
+          .catch((e) => {
+            logger.error(
+              `No abstract exists ${pii}, will go to science direct..`
+            );
+            return true; // No error element found
+          });
+
+        errorInWaybackMachine = errorExists || noHighlight || noAbstract;
+      }
+
+      let waitTime = 3000;
+
+      if (errorInWaybackMachine || directlyFromSD) {
+        if (directlyFromSD) {
           logger.info(
-            `no error element not found on page for file ${pii}, proceeding normally.`
+            `Requested scraping directly from Science Direct for PII ${pii}.`
           );
-          return false; // No error element found
-        });
-
-      const noHighlight = await page
-        .$eval("#abstracts .author-highlights .list", (el) => el === null)
-        .catch((e) => {
+        } else if (errorInWaybackMachine) {
           logger.error(
-            `No highlight exists ${pii}, will go to science direct..`
+            `Error detected on the initial page for file ${pii}. Navigating to fallback page.`
           );
-          return true; // No error element found
-        });
-
-      const noAbstract = await page
-        .$eval("#abstracts .author", (el) => el === null)
-        .catch((e) => {
-          logger.error(
-            `No abstract exists ${pii}, will go to science direct..`
-          );
-          return true; // No error element found
-        });
-
-      let waitTime = 4000;
-
-      if (errorExists || noHighlight || noAbstract) {
-        logger.error(
-          `Error detected on the initial page for file ${pii}. Navigating to fallback page.`
-        );
+        }
 
         await page.goto(scienceDirectUri, {
           referer: "https://www.google.com/",
           waitUntil: "networkidle2",
         });
 
-        // await page.waitForSelector("#abstracts", {
-        //   timeout: 2000,
-        // });
-
-        waitTime = 6000;
+        waitTime = 4000;
       }
 
       try {
@@ -571,15 +621,16 @@ const main = async () => {
     });
 
     // const h = [
-    //   "S0034528818315327",
-    //   "S0003347220302657",
-    //   "S000334722030289X",
-    //   "S0009279719320046",
-    //   "S0014483519306608",
-    //   "S0003347220303018",
-    //   "S000927971932004",
+    // "S0014488619302298",
+    // "S0034528818315327",
+    // "S0003347220302657",
+    // "S000334722030289X",
+    // "S0009279719320046",
+    // "S0014483519306608",
+    // "S0003347220303018",
+    // "S000927971932004",
     // ];
-    // const d = await run(h, browser);
+    // const d = await scrapDataFromPIIs(h, browser, false);
     // console.log(d);
     // return;
 
@@ -599,11 +650,22 @@ const main = async () => {
      */
     const piiQuery = {
       name: "fetch-batched-piis",
+      // text: `
+      //   SELECT "PII"
+      //   FROM "MixSub"
+      //   WHERE "OriginalAbstract" NOT LIKE '%.'
+      //     AND ("BetterAbstract" IS NULL OR "BetterHighlight" IS NULL)
+      //   LIMIT $1
+      //   `,
       text: `
-      SELECT "PII"
+      SELECT "PII",
+            LENGTH("BetterHighlight")::DECIMAL/ LENGTH("OriginalHighlight") AS "RATIO"
       FROM "MixSub"
-      WHERE "OriginalAbstract" NOT LIKE '%.'
-        AND ("BetterAbstract" IS NULL OR "BetterHighlight" IS NULL)
+      WHERE ("BetterHighlight" IS NULL
+            AND "OriginalHighlight" IS NULL)
+          OR (LENGTH("BetterHighlight") >= 1.1 * LENGTH("OriginalHighlight")
+              AND "HallucinatedHighlightEntities" IS NULL)
+      ORDER BY "RATIO" DESC
       LIMIT $1
       `,
       values: [batchSize],
@@ -618,25 +680,43 @@ const main = async () => {
       UPDATE "MixSub"
       SET "Title" = $1,
           "BetterAbstract" = $2,
-          "BetterHighlight" = $3
-      WHERE "PII" = $4;
+          "BetterHighlight" = $3,
+          "HallucinatedHighlightEntities" = '[]'
+      WHERE "PII" = $4
       `,
     };
 
-    const todoRes = await pool.query(
-      `
+    /**
+     * @type {import("pg").QueryConfig<[]>}
+     */
+    const todoQuery = {
+      name: "todo-abstract-highlight",
+      // text: `
+      // SELECT COUNT(*) AS "TODO"
+      // FROM "MixSub"
+      // WHERE "OriginalAbstract" NOT LIKE '%.'
+      //   AND ("BetterAbstract" IS NULL OR "BetterHighlight" IS NULL)
+      // `
+      text: `
       SELECT COUNT(*) AS "TODO"
       FROM "MixSub"
-      WHERE "OriginalAbstract" NOT LIKE '%.'
-        AND ("BetterAbstract" IS NULL OR "BetterHighlight" IS NULL)
-      `
-    );
+      WHERE ("BetterHighlight" IS NULL
+            AND "OriginalHighlight" IS NULL)
+          OR (LENGTH("BetterHighlight") >= 1.1 * LENGTH("OriginalHighlight")
+              AND "HallucinatedHighlightEntities" IS NULL)
+      `,
+    };
 
+    const todoRes = await pool.query(todoQuery, []);
     const todoCnt = parseInt(todoRes.rows[0]["TODO"]);
     logger.info(`TOTAL VALUES TO UPDATE :: ${todoCnt}`);
 
     while (updtCnt < todoCnt) {
       const client = await pool.connect();
+
+      const remRes = await pool.query(todoQuery, []);
+      const remCnt = parseInt(remRes.rows[0]["TODO"]);
+      logger.info(`REMAINING VALUES TO UPDATE :: ${remCnt}`);
 
       const res = await client.query(piiQuery);
 
@@ -650,25 +730,43 @@ const main = async () => {
         break;
       }
 
+      // /** @type {string[]} */
+      // const bhls = res.rows.map((r) => r["BetterHighlight"]);
+
       try {
         logger.info(
           `batch started at ${getIndianTime()} with contents ${piis}`
         );
 
-        const data = await scrapDataFromPIIs(piis, browser);
+        const data = await scrapDataFromPIIs(piis, browser, true);
 
         logger.info(JSON.stringify(data, null, 4));
 
         for (let i = 0; i < piis.length; ++i) {
-          if (!data[i].abstract) {
+          if (!data[i].abstract === null) {
             logger.error(`found abstract to be falsy for ${piis[i]}`);
             data[i].abstract = ""; // do not set to null, set to empty string
           }
 
-          if (!data[i].highlight) {
+          if (data[i].highlight === null) {
             logger.error(`found highlight to be falsy for ${piis[i]}`);
             data[i].highlight = ""; // do not set to null, set to empty string
           }
+
+          data[i].highlight = cleanStringRemoveInvisibleChars(
+            data[i].highlight || ""
+          );
+          data[i].abstract = cleanStringRemoveInvisibleChars(
+            data[i].abstract || ""
+          );
+
+          // logger.info(`Existing BetterHighlight\n\n${bhls[i]}`)
+
+          // const el = data[i].highlight?.length || 0;
+
+          // if (el < bhls[i].length) {
+          //   logger.error("extracted data length is half or even less");
+          // }
 
           try {
             await client.query(
@@ -692,6 +790,7 @@ const main = async () => {
         );
       } catch (e) {
         logger.error("error occurred for batch", piis, e);
+        logger.error(e.stack);
       }
 
       client.release();
@@ -699,7 +798,8 @@ const main = async () => {
 
     await browser.close();
   } catch (e) {
-    logger.error(e);
+    logger.error("error occurred inside while loop for update count");
+    logger.error(e.stack);
   }
 };
 
@@ -883,6 +983,14 @@ const dumpJournalPIIs = async () => {
   }
 };
 
-dumpJournalPIIs()
+main()
   .then(() => process.exit(0))
   .catch((e) => process.exit(1));
+
+// console.log(
+//   cleanStringRemoveInvisibleChars(
+//     "Hippocampal mitochondrial length is not affected by loss of Pink1. Pink1−/− mice have reduced hippocampal tyrosine hydroxylase immunoreactivity. Pink1−/− mice are impaired in hippocampus-dependent tasks compared to matched WT mice. Cognition in Pink1−/− mice is improved by treatment with a dopamine D1 agonist."
+//   )
+// );
+
+// ("Hippocampal mitochondrial length is not affected by loss of Pink1. Pink1-/- mice have reduced hippocampal tyrosine hydroxylase immunoreactivity. Pink1-/- mice are impaired in hippocampus-dependent tasks compared to matched WT mice. Cognition in Pink1-/- mice is improved by treatment with a dopamine D1 agonist.");

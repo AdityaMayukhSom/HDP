@@ -4,11 +4,15 @@ import pathlib
 import sys
 import threading
 import time
+from pathlib import Path
 
 import sqlalchemy as sa
-from dotenv import dotenv_values
 from google import genai
 from loguru import logger
+
+sys.path.append(str(Path(__file__).parent.parent))
+
+from src.utils import get_postgresql_engine
 
 os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
@@ -136,29 +140,13 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
 
 
 def main(argv: list[str]):
-    config = dotenv_values(dotenv_path=".env", verbose=True, encoding="utf-8")
-    keys = list(
-        filter(
-            lambda x: x.strip() != "",
-            pathlib.Path("keys.txt").read_text(encoding="utf-8").strip().split("\n"),
-        )
-    )
-
-    keys = set(keys)
-
-    conn_url = sa.URL.create(
-        drivername="postgresql+psycopg2",
-        username=config["PG_USERNAME"],
-        password=config["PG_PASSWORD"],
-        host=config["PG_HOST"],
-        database=config["PG_DATABASE"],
-        port=int(config["PG_PORT"]),
-    )
+    engine = get_postgresql_engine()
+    keys = pathlib.Path("keys.txt").read_text(encoding="utf-8").strip().split("\n")
+    keys = set(filter(lambda x: x.strip() != "", keys))
 
     instr = pathlib.Path("./scripts/instructions/gemini.txt").read_text(
         encoding="utf-8"
     )
-    engine = sa.create_engine(conn_url, pool_size=128, max_overflow=256)
 
     with engine.connect() as conn:
         todo_query = sa.text(

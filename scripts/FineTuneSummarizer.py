@@ -17,7 +17,7 @@ from trl import SFTTrainer
 from unsloth import FastLanguageModel, is_bfloat16_supported
 from unsloth.chat_templates import train_on_responses_only
 
-from src.hypermixsub import extract_hyper_mix_sub_from_db
+from src.hypermixsub import extract_hms_from_db
 from src.prompt import prepare_hyper_mix_sub_prompts
 
 # https://huggingface.co/docs/evaluate/package_reference/loading_methods#evaluate.load.path
@@ -109,9 +109,9 @@ def main(argv: list[str]):
     flm: LlamaForCausalLM = _t[0]
     tokenizer: PreTrainedTokenizerFast = _t[1]
 
-    dd = extract_hyper_mix_sub_from_db(engine)
+    dd = extract_hms_from_db(engine)
     dd = prepare_hyper_mix_sub_prompts(dd, tokenizer)
-    trn_ds, val_ds, tst_ds = dd["train"], dd["validation"], dd["test"]
+    trn_ds, val_ds, tst_ds = dd["TRAIN"], dd["VALIDATION"], dd["TEST"]
 
     model: PeftModelForCausalLM = FastLanguageModel.get_peft_model(
         flm,

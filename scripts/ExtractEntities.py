@@ -39,8 +39,8 @@ from src.memory import empty_all_memory
 
 
 def please_work(val: str):
-    sentence = Sentence(val)
-    tagger = Classifier.load("ner-ontonotes")
+    sentence = Sentence(val, language_code="en")
+    tagger = Classifier.load("ner-large")
 
     tagger.predict(sentence)
 
