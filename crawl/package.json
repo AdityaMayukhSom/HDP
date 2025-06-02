@@ -20,5 +20,10 @@
   },
   "devDependencies": {
     "prettier": "^3.5.3"
+  },
+  "prettier": {
+    "tabWidth": 4,
+    "useTabs": false,
+    "semi": true
   }
 }
