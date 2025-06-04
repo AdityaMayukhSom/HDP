@@ -3,99 +3,35 @@ import os
 import pathlib
 import sys
 
-import evaluate
-import numpy as np
-import sqlalchemy as sa
 import torch
-from dotenv import dotenv_values
+
+from unsloth import FastLanguageModel, is_bfloat16_supported  # isort: skip
+from unsloth.chat_templates import train_on_responses_only  # isort: skip
+
 from huggingface_hub import login
 from peft import PeftModelForCausalLM
 from transformers import TrainingArguments
 from transformers.models.llama import LlamaForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from trl import SFTTrainer
-from unsloth import FastLanguageModel, is_bfloat16_supported
-from unsloth.chat_templates import train_on_responses_only
+
+sys.path.append(str(pathlib.Path(__file__).parent.parent))
+sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
 
 from src.hypermixsub import extract_hms_from_db
-from src.prompt import prepare_hyper_mix_sub_prompts
+from src.prompt import (
+    prepare_hms_convos_for_fine_tuning,
+    prepare_hms_prompts_for_fine_tuning,
+)
+from src.utils import get_postgresql_engine, load_dotenv_in_config
 
-# https://huggingface.co/docs/evaluate/package_reference/loading_methods#evaluate.load.path
-# Trainer.py does not have this, the following snippet is sourced from this link.
-# https://github.com/huggingface/trl/issues/862#issuecomment-1896074498
-
-# we need to compute two metrices seperately
-# https://discuss.huggingface.co/t/log-multiple-metrics-while-training/8115/2
-metric_bleu = evaluate.load("bleu")
-metric_rouge = evaluate.load("rouge")
-
-
-def preprocess_logits_for_metrics(logits, labels):
-    if isinstance(logits, tuple):
-        logits = logits[0]
-    return logits.argmax(dim=-1)
-
-
-def compute_metrics(eval_preds, tokenizer: PreTrainedTokenizerFast):
-    # Here preds are all_preds and labels are label_ids/all_labels.
-    preds, labels = eval_preds
-
-    if isinstance(preds, tuple):
-        preds = preds[0]
-
-    # Replace -100 in the preds as we can't decode them
-    preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
-
-    # Decode generated summaries into text
-    decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
-
-    # Replace -100 in the labels as we can't decode them
-    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-    # Decode reference summaries into text
-    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-    # ROUGE expects a newline after each sentence
-    decoded_preds = ["\n".join(pred.strip()) for pred in decoded_preds]
-
-    decoded_labels = ["\n".join(label.strip()) for label in decoded_labels]
-
-    scores_bleu = metric_bleu.compute(
-        predictions=decoded_preds,
-        references=decoded_labels,
-    )
-    scores_rouge = metric_rouge.compute(
-        predictions=decoded_preds,
-        references=decoded_labels,
-    )
-
-    # https://www.freecodecamp.org/news/python-merge-dictionaries-merging-two-dicts-in-python/
-    # https://www.datacamp.com/tutorial/python-dictionary-append
-
-    scores: dict[str, str] = {}
-
-    for key, score in scores_bleu.items():
-        scores[f"bleu_{key}"] = score
-
-    for key, score in scores_rouge.items():
-        scores[f"rouge_{key}"] = score
-
-    return scores
+from .metrics import compute_metrics, preprocess_logits_for_metrics
 
 
 def main(argv: list[str]):
-    config = dotenv_values(".env")
-
+    engine = get_postgresql_engine()
+    config = load_dotenv_in_config()
     login(token=config["HF_TOKEN"])
-
-    conn_url = sa.URL.create(
-        drivername="postgresql+psycopg2",
-        username=config["PG_USERNAME"],
-        password=config["PG_PASSWORD"],
-        host=config["PG_HOST"],
-        database=config["PG_DATABASE"],
-        port=int(config["PG_PORT"]),
-    )
-
-    engine = sa.create_engine(conn_url)
 
     _t = FastLanguageModel.from_pretrained(
         model_name=config["HF_BASE_MODEL_REPO"],
@@ -110,7 +46,8 @@ def main(argv: list[str]):
     tokenizer: PreTrainedTokenizerFast = _t[1]
 
     dd = extract_hms_from_db(engine)
-    dd = prepare_hyper_mix_sub_prompts(dd, tokenizer)
+    dd = prepare_hms_convos_for_fine_tuning(dd)
+    dd = prepare_hms_prompts_for_fine_tuning(dd, tokenizer)
     trn_ds, val_ds, tst_ds = dd["TRAIN"], dd["VALIDATION"], dd["TEST"]
 
     model: PeftModelForCausalLM = FastLanguageModel.get_peft_model(
@@ -139,7 +76,7 @@ def main(argv: list[str]):
         eval_dataset=val_ds,
         packing=True,
         # The field on which to train the model, we have added the generated prompt under 'Prompt'
-        dataset_text_field="Prompt",
+        dataset_text_field="text",
         # max_seq_length=MAX_SEQ_LEN,
         dataset_num_proc=os.cpu_count(),
         compute_metrics=lambda preds: compute_metrics(preds, tokenizer),

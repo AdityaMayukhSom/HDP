@@ -1,3 +1,6 @@
 [submodule "EntFA"]
 	path = EntFA
 	url = git@github.com:AdityaMayukhSom/EntFA.git
+[submodule "moverscore"]
+	path = moverscore
+	url = git@github.com:AdityaMayukhSom/moverscore.git

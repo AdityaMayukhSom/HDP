@@ -8,18 +8,63 @@ from transformers import PreTrainedTokenizerFast
 
 @lru_cache
 def get_summarizer_system_instructions(
-    instr_path="./instructions/summarizer-system.txt",
+    path="./instructions/summarizer-system.txt",
 ) -> str:
-    data = Path(instr_path).read_text()
-    return data
+    return Path(path).read_text()
 
 
 @lru_cache
 def get_summarizer_user_instructions(
-    instr_path="./instructions/summarizer-user.txt",
+    path="./instructions/summarizer-user.txt",
 ) -> str:
-    data = Path(instr_path).read_text()
-    return data
+    return Path(path).read_text()
+
+
+@lru_cache
+def get_ner_system_instructions(
+    path="./instructions/ner-system.txt",
+) -> str:
+    return Path(path).read_text()
+
+
+@lru_cache
+def get_ner_user_instructions(
+    path="./instructions/ner-user.txt",
+) -> str:
+    return Path(path).read_text()
+
+
+def create_summarizer_convo_for_fine_tuning(examples):
+    abstracts = examples["ArticleAbstract"]
+    highlights = examples["CorrectHighlight"]
+
+    sys_instr = get_summarizer_system_instructions()
+    usr_instr = get_summarizer_user_instructions()
+
+    convos: list = []
+
+    for abstract, highlight in zip(abstracts, highlights):
+        convo = [
+            {
+                "role": "system",
+                "content": sys_instr,
+            },
+            {
+                "role": "user",
+                "content": f"{usr_instr}\n{abstract}",
+            },
+            {
+                "role": "assistant",
+                # Must add EOS_TOKEN, otherwise your generation will go on forever!
+                "content": highlight,
+            },
+        ]
+
+        convos.append(convo)
+
+    return {
+        "conversations": convos,
+    }
 
 
 def create_summarizer_prompt_for_fine_tuning(
@@ -27,49 +72,48 @@ def create_summarizer_prompt_for_fine_tuning(
     *,
     tokenizer: PreTrainedTokenizerFast,
 ):
-    abstracts = examples["ArticleAbstract"]
-    highlights = examples["CorrectHighlight"]
-
-    sys_instr = get_summarizer_system_instructions()
-    usr_instr = get_summarizer_user_instructions()
+    convos: list = examples["conversations"]
 
     prompts: list[str] = []
 
-    for abstract, highlight in zip(abstracts, highlights):
-        row_json = [
-            {
-                "role": "system",
-                "content": sys_instr,
-            },
-            {
-                "role": "user",
-                "content": f"{usr_instr}\n\n{abstract}",
-            },
-            {
-                "role": "assistant",
-                # Must add EOS_TOKEN, otherwise your generation will go on forever!
-                "content": highlight + tokenizer.eos_token,
-            },
-        ]
+    eos_token = (
+        tokenizer.eos_token
+        if tokenizer.eos_token is not None and isinstance(tokenizer.eos_token, str)
+        else ""
+    )
+
+    for convo in convos:
+        # assuming the last value in convo is assistant one, turn on for llama
+        convo[-1]["content"] = convo[-1]["content"] + eos_token
 
         prompt = tokenizer.apply_chat_template(
-            row_json,
+            convo,
             tokenize=False,
             add_generation_prompt=False,
+            enable_thinking=False,
         )
 
         prompts.append(prompt)
 
     return {
-        "Prompt": prompts,
+        "text": prompts,
     }
 
 
-def prepare_hyper_mix_sub_prompts(
-    hms_dd: DatasetDict,
+def prepare_hms_convos_for_fine_tuning(dd: Dataset | DatasetDict):
+    dd = dd.map(
+        create_summarizer_convo_for_fine_tuning,
+        num_proc=os.cpu_count(),
+        batched=True,
+    )
+    return dd
+
+
+def prepare_hms_prompts_for_fine_tuning(
+    dd: Dataset | DatasetDict,
     tokenizer: PreTrainedTokenizerFast,
 ) -> DatasetDict:
-    dd = hms_dd.map(
+    dd = dd.map(
         create_summarizer_prompt_for_fine_tuning,
         num_proc=os.cpu_count(),
         batched=True,
@@ -108,6 +152,7 @@ def eval_summarizer_prompt_single_example(
         row_json,
         tokenize=False,
         add_generation_prompt=True,
+        enable_thinking=False,
     )
 
     return prompt
@@ -120,12 +165,9 @@ def eval_summarizer_prompt_whole_dataset(
     prompts: list[str] = []
 
     for abstract in abstracts:
-        prompt = eval_summarizer_prompt_single_example(
-            abstract,
-            tokenizer,
-        )
+        prompt = eval_summarizer_prompt_single_example(abstract, tokenizer)
         prompts.append(prompt)
 
     return {
-        "Prompt": prompts,
+        "text": prompts,
     }

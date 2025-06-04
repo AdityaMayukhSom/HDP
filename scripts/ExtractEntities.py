@@ -1,15 +1,23 @@
-import json
+from unsloth import FastLanguageModel  # isort: skip
+import pathlib
 import sys
 from pathlib import Path
 
-import spacy
-from flair.data import Sentence
-from flair.nn import Classifier
 from loguru import logger
+from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.memory import empty_all_memory
+from src.prompt import get_ner_system_instructions, get_ner_user_instructions
+
+# nltk.download("maxent_ne_chunker_tab")
+# nltk.download("averaged_perceptron_tagger_eng")
+# nltk.download("punkt_tab")
+# nltk.download("punkt")
+# nltk.download("averaged_perceptron_tagger")
+# nltk.download("maxent_ne_chunker")
+# nltk.download("words")
 
 # def generate_entities( rows: list[str]):
 # rows should be one column from dataset_rows
@@ -38,17 +46,79 @@ from src.memory import empty_all_memory
 # return ents_str
 
 
-def please_work(val: str):
-    sentence = Sentence(val, language_code="en")
-    tagger = Classifier.load("ner-large")
+def please_work(sentence: str):
+    # sentence = Sentence(val, language_code="en")
+    # tagger = Classifier.load("ner-large")
 
-    tagger.predict(sentence)
+    # tagger.predict(sentence)
 
-    print(sentence.get_labels())
+    # print(sentence.get_labels())
+
+    # Download necessary resources
+
+    # Sample sentence
+
+    # Tokenize and POS tag
+    # tokens = word_tokenize(sentence)
+    # pos_tags = pos_tag(tokens)
+    # print(pos_tags)
+
+    # Perform NER
+    # named_entities = ne_chunk(pos_tags)
+    # print(named_entities)
 
     # for l in sentence:
     #     print(l)
     # print(sentence)
+
+    _t = FastLanguageModel.from_pretrained(
+        model_name="unsloth/Llama-3.2-3B-Instruct-unsloth-bnb-4bit",
+        max_seq_length=2048,
+        dtype=None,
+        load_in_4bit=True,
+    )
+
+    model: LlamaForCausalLM = _t[0]
+    tokenizer: PreTrainedTokenizerFast = _t[1]
+
+    FastLanguageModel.for_inference(model)
+
+    inputs = tokenizer.apply_chat_template(
+        [
+            [
+                {"role": "system", "content": get_ner_system_instructions()},
+                {
+                    "role": "user",
+                    "content": f"{get_ner_user_instructions()}\n\n{sentence}",
+                },
+            ]
+        ],
+        add_generation_prompt=True,
+        tokenize=True,
+        padding=True,
+        truncation=True,
+        return_tensors="pt",
+        return_dict=True,
+    ).to("cuda")
+
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=2048,
+        use_cache=True,
+        pad_token_id=tokenizer.eos_token_id,
+    )
+
+    outputs = tokenizer.batch_decode(
+        outputs[:, inputs.input_ids.shape[1] :],
+        skip_special_tokens=True,
+    )
+
+    highlights = [
+        highlight.split(tokenizer.eos_token)[0].strip().replace("\n", " ")
+        for highlight in outputs
+    ]
+
+    print(highlights[0])
 
 
 # def entities_from_batch(nlp:spacy.language.Language, dataset_rows):
@@ -110,7 +180,7 @@ def please_work(val: str):
 
 
 def main():
-    empty_all_memory()
+    # empty_all_memory()
     # nlp = spacy.blank("en")
     # llm_ner = nlp.add_pipe("llm_ner")
     # llm_ner.add_label("PERSON")
@@ -133,11 +203,10 @@ def main():
     #     ],
     # )
 
-    please_work(
-        "Novel catalytic route to synthesize 1Z,5Z-diene macrodiolides, inspired by Butenolide biosynthesis, achieves 65-92% yields and exceptional >97% stereoselectivity using hafnium phosphate. Unsaturated dicarboxylic acids were prepared by homo-cyclomagnesiation with SmI2, followed by Oppenauer oxidation, rather than Jones oxidation. Macrodiolides shows remarkable anti-cancer activity, inducing apoptosis in Jurkat cells through mitochondrial pathways and caspase activation, leading to cell death. These compounds inhibit phosphorylation of Akt, p38 kinases, mTOR and NF-kB pathways in cancer cells, confirmed by western blotting."
-    )
+    prompt = pathlib.Path("./data/ner-example.txt").read_text()
+    please_work(prompt)
 
-    empty_all_memory()
+    # empty_all_memory()
 
 
 try:

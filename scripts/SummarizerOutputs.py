@@ -30,7 +30,8 @@ def generate_eval_highlights(
     tokenizer: PreTrainedTokenizerFast,
 ):
     # init_identifier = "<|start_header_id|>assistant<|end_header_id|>"
-    term_identifier = "<|eot_id|>"
+    # term_identifier = "<|eot_id|>"
+    term_identifier = tokenizer.eos_token
 
     batch_data = [
         eval_summarizer_row_json_single_example(abstract) for abstract in abstracts

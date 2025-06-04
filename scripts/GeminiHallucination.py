@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from textwrap import dedent
 
 import sqlalchemy as sa
 from google import genai
@@ -121,14 +122,24 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
                 )
 
                 updt_cnt += 1
-                logger.success(
-                    f"\nPII: {pii}\n\nCorrect Summary:\n{correct}\n\nHallucinated Summary:\n{hallucinated}\n\nStatus: SUCCESS\nSleeping for {unit_delay} seconds..."
-                )
+
+                msg = f"""
+                PII: {pii}
+                
+                Correct Summary:
+                {correct}
+                
+                Hallucinated Summary:
+                {hallucinated}
+                
+                STATUS: SUCCESS
+                SLEEP {unit_delay} SEC...
+                """
+
+                logger.success(dedent(msg))
             except Exception as e:
                 logger.error(f"\nError with key {key}\n{str(e)}")
-                logger.warning(
-                    f"PII: {pii},Status: FAILED, Sleep {unit_delay} seconds."
-                )
+                logger.warning(f"PII: {pii}, STATUS: FAILED, SLEEP {unit_delay} SEC...")
             finally:
                 conn.commit()
 
@@ -144,9 +155,7 @@ def main(argv: list[str]):
     keys = pathlib.Path("keys.txt").read_text(encoding="utf-8").strip().split("\n")
     keys = set(filter(lambda x: x.strip() != "", keys))
 
-    instr = pathlib.Path("./scripts/instructions/gemini.txt").read_text(
-        encoding="utf-8"
-    )
+    instr = pathlib.Path("./instructions/gemini.txt").read_text(encoding="utf-8")
 
     with engine.connect() as conn:
         todo_query = sa.text(

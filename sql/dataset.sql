@@ -16,6 +16,62 @@ SELECT COUNT(*)
 FROM "MixSub";
 
 
+DELETE
+FROM "MixSub"
+WHERE "PII" IN ('S2212054825000177',
+                'S2212054825000219');
+
+
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE LENGTH("CorrectHighlight") > 1000
+    OR LENGTH("ArticleAbstract") > 2800;
+
+
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE LENGTH("CorrectHighlight") >= LENGTH("ArticleAbstract");
+
+
+SELECT *
+FROM "MixSubView"
+ORDER BY RANDOM()
+LIMIT 3;
+
+
+DELETE
+FROM "MixSub"
+WHERE "PII" IN ('S2666498425000146',
+                'S2666498425000365',
+                'S2666498425000237');
+
+
+INSERT INTO "MixSub" ("PII",
+                      "Split")
+VALUES ('S2666498425000146', 'TRAIN'),
+       ('S2666498425000365', 'TRAIN'),
+       ('S2666498425000237', 'TRAIN');
+
+
+SELECT *
+FROM "MixSub"
+WHERE "PII" IN ('S2666498425000146',
+                'S2666498425000365',
+                'S2666498425000237');
+
+
+SELECT *
+FROM "MixSubView"
+WHERE "CorrectHighlight" IS NULL
+    OR "CorrectHighlight" = '';
+
+
+SELECT *
+FROM "MixSub"
+WHERE "BetterHighlight" IS NULL
+    AND "OriginalHighlight" IS NULL;
+
+
 SELECT COUNT(*)
 FROM "MixSub"
 WHERE "Split" = 'VALIDATION';
@@ -243,7 +299,7 @@ WHERE "PII" = 'S1369527420301065';
 
 SELECT *
 FROM "MixSub"
-WHERE "PII" = 'S1369527420301065';
+WHERE "PII" = 'S2949719123000146';
 
 
 SELECT *

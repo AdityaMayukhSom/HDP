@@ -1435,7 +1435,9 @@ dependencies = [
     { name = "pip" },
     { name = "psutil" },
     { name = "psycopg2-binary" },
+    { name = "pyemd" },
     { name = "python-dotenv" },
+    { name = "pytorch-transformers" },
     { name = "rouge-score" },
     { name = "scikit-learn" },
     { name = "scrapy" },
@@ -1480,7 +1482,9 @@ requires-dist = [
     { name = "pip", specifier = ">=25.1.1" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
+    { name = "pyemd", specifier = ">=1.0.0" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
+    { name = "pytorch-transformers", specifier = ">=1.2.0" },
     { name = "rouge-score", specifier = ">=0.1.2" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "scrapy", specifier = ">=2.13.0" },
@@ -3401,6 +3405,31 @@ wheels = [
 ]
 
 [[package]]
+name = "pyemd"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1a/d5/91492007e786a7fbcbba8423cd3637ea9311c4844aaf753d8e2ba086e48a/pyemd-1.0.0.tar.gz", hash = "sha256:b42b5ae7b2d15b1d4dee63810ea798a39217e8a76b7b49c0eb63a84e0fd900fe", size = 87190, upload-time = "2023-02-27T04:40:52.913Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/30/969c7f3a77a2a4f32654dd7516a7cb3702736208daef7597647ef7038ed3/pyemd-1.0.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:5771bb80b11b8d59bcb3e09ed4aca0d3ee4c1dd23d5bce21360ad539c86fda01", size = 165667, upload-time = "2023-02-27T04:41:15.207Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/22/3294b73e8c639e581b8b1c2eb5c2120c049212b5544e2d74bf20cfc2618e/pyemd-1.0.0-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:3d8d5ba47954a8c67dc22f0a7e129a7dc009a614e4e86d5e8938bfc4fdfa8800", size = 651344, upload-time = "2023-02-27T04:41:17.285Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/f2/fe8a2a9c3ca6accabb89332aa8e89b7e1b408482ae3ab6816aa7bd1f56b0/pyemd-1.0.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8eb6fb4aba6a8cde4fe32ea29288e367b625685af82ef3a22200e04f7c267993", size = 662580, upload-time = "2023-02-27T04:41:19.392Z" },
+    { url = "https://files.pythonhosted.org/packages/05/e3/fa28b2a3bcc9f6c749d503599544d9df34ce62b0078759220a84f8e3d7b7/pyemd-1.0.0-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:dee4e4da82b3e035d23d39e97b2b04d7f20200eaf355cd73d9ccee705638e74d", size = 1233609, upload-time = "2023-02-27T04:41:20.914Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/a0/1f597a3e37fe5883fa3c5341395790dd72ed2d78dba47b3df4ef7004a312/pyemd-1.0.0-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:a7e4d6a841e91f5e4af1c2cca79a926da58b1f4544e3f24617863d494aed4874", size = 1199788, upload-time = "2023-02-27T04:41:23.35Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/13/6de651156fa4c4dde95733091eec915d20efb9f134a7367e4c62f5b59731/pyemd-1.0.0-cp310-cp310-win32.whl", hash = "sha256:6d52b8e133666afc81e2084ebcb06fc52b12a622af2224ab901474725a1ce3e1", size = 143946, upload-time = "2023-02-27T04:41:25.58Z" },
+    { url = "https://files.pythonhosted.org/packages/77/41/9c4665174c1c85af29e0a517df7ec1494b0988f971096867ecdb00270e44/pyemd-1.0.0-cp310-cp310-win_amd64.whl", hash = "sha256:04cc05a25128ac9b516c0251ef9b17d583bf6ec1787eaed6eac0b6716153b113", size = 147938, upload-time = "2023-02-27T04:41:26.981Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/72/971e23faf872d6e36d554f2a67c93142581d8bea4906ce658f84a76a03b9/pyemd-1.0.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:24939dd2169323c2f11c221b6dfdef108cfd0db127f16f4e8f25532f0107a664", size = 164581, upload-time = "2023-02-27T04:41:29.34Z" },
+    { url = "https://files.pythonhosted.org/packages/51/6b/15ea48e73084a8aad8be1e32b759e528c0a4a2b34cf3c7bbf6b2b437bb46/pyemd-1.0.0-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:613805cbba59a739a282e85c2db873d7b0c5e85fd924c9c16777f8b04034bed1", size = 653791, upload-time = "2023-02-27T04:41:31.522Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/8f/31dea0b9a6825a3806f96ca179790613b6e13041310e3decb172af6a51ef/pyemd-1.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e6dc00bca8ce4e1d1b82a28b41cf3215dc4f35296dd5da4079ead586dd3f82c0", size = 666621, upload-time = "2023-02-27T04:41:33.697Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/26/e8ad349c8dad38d672c99ddbc047c536d264363c7bd289381496dc101da7/pyemd-1.0.0-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:6a4c7863f72d8d8174c642060af7623793140bf94ff0e6bf3d757383bf930ffb", size = 1240174, upload-time = "2023-02-27T04:41:35.248Z" },
+    { url = "https://files.pythonhosted.org/packages/86/b7/bf7875f3fb30ce9dc5119967a7cf3a1e233e4f2b99ebbbd758be479b325d/pyemd-1.0.0-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:12e973937aeefe09e0e9b8f3e9799e223207e7634d1e387d7266adadc062e590", size = 1204679, upload-time = "2023-02-27T04:41:37.429Z" },
+    { url = "https://files.pythonhosted.org/packages/20/2b/ec3ae2e2123927b5a1fd761ccb542006137f62b8ed1ffb448c139d2e31fe/pyemd-1.0.0-cp311-cp311-win32.whl", hash = "sha256:4a79fecf151c508405838bfa47c0f42f23e898be2c8455a36f9545335b233f6a", size = 144058, upload-time = "2023-02-27T04:41:38.987Z" },
+    { url = "https://files.pythonhosted.org/packages/81/c0/d567e25ecfd9aeb1e4cfb2971211f643ad3a5a35bd5c8284ef22021ee660/pyemd-1.0.0-cp311-cp311-win_amd64.whl", hash = "sha256:144b7b3510845e25b42c08057265121970f30aaa3cbbe5c3ed37ce2a8bb1732c", size = 147977, upload-time = "2023-02-27T04:41:41.294Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.19.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3499,6 +3528,25 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/90/c3/aecc90deea743b93757e05e235f70eef479509eb3eb11b19f3aa0d528541/pytorch_revgrad-0.2.0.tar.gz", hash = "sha256:9cf097a7d18cbadddeaec9fef74b258d70b6cb8d0c77f524baab18bffc7d7be9", size = 7086, upload-time = "2021-01-09T17:35:49.131Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/e9/10b11b186b99c40213dca68cf6c38051b6704a74e1056d3f3ca4c12f14b9/pytorch_revgrad-0.2.0-py3-none-any.whl", hash = "sha256:2276fb189b2ce26f756a97effe2a6bcf8f7fdc60542c5dfb45c53f09ef123aa7", size = 4564, upload-time = "2021-01-09T17:35:47.543Z" },
+]
+
+[[package]]
+name = "pytorch-transformers"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "boto3" },
+    { name = "numpy" },
+    { name = "regex" },
+    { name = "requests" },
+    { name = "sacremoses" },
+    { name = "sentencepiece" },
+    { name = "torch" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/46/60ade12cd10f3e3dc7cb109361a73ebd8a8530c35bed71f681d2588aa277/pytorch_transformers-1.2.0.tar.gz", hash = "sha256:293e4a864ae9d9401f9fba13f16b8696e4a1cb38bcd0b56562d03af5489daeb9", size = 152283, upload-time = "2019-09-04T11:36:39.462Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/b7/d3d18008a67e0b968d1ab93ad444fc05699403fa662f634b2f2c318a508b/pytorch_transformers-1.2.0-py3-none-any.whl", hash = "sha256:bdb606fe1f2d27586710ed03cfa49dbbd80215c38bf965862daada0c137fd7ce", size = 176430, upload-time = "2019-09-04T11:36:36.704Z" },
 ]
 
 [[package]]
@@ -3818,6 +3866,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ed/5d/9dcc100abc6711e8247af5aa561fc07c4a046f72f659c3adea9a449e191a/s3transfer-0.13.0.tar.gz", hash = "sha256:f5e6db74eb7776a37208001113ea7aa97695368242b364d73e91c981ac522177", size = 150232, upload-time = "2025-05-22T19:24:50.245Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/18/17/22bf8155aa0ea2305eefa3a6402e040df7ebe512d1310165eda1e233c3f8/s3transfer-0.13.0-py3-none-any.whl", hash = "sha256:0148ef34d6dd964d0d8cf4311b2b21c474693e57c2e069ec708ce043d2b527be", size = 85152, upload-time = "2025-05-22T19:24:48.703Z" },
+]
+
+[[package]]
+name = "sacremoses"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "joblib" },
+    { name = "regex" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/51/fbdc4af4f6e85d26169e28be3763fe50ddfd0d4bf8b871422b0788dcc4d2/sacremoses-0.1.1.tar.gz", hash = "sha256:b6fd5d3a766b02154ed80b962ddca91e1fd25629c0978c7efba21ebccf663934", size = 883188, upload-time = "2023-10-30T15:56:20.187Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/f0/89ee2bc9da434bd78464f288fdb346bc2932f2ee80a90b2a4bbbac262c74/sacremoses-0.1.1-py3-none-any.whl", hash = "sha256:31e04c98b169bfd902144824d191825cd69220cdb4ae4bcf1ec58a7db5587b1a", size = 897476, upload-time = "2023-10-30T15:56:18.121Z" },
 ]
 
 [[package]]

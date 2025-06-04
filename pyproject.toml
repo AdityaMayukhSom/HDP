@@ -40,6 +40,8 @@ dependencies = [
     "spacy-llm>=0.7.3",
     "flair>=0.15.1",
     "tf-keras>=2.15.0",
+    "pyemd>=1.0.0",
+    "pytorch-transformers>=1.2.0",
 ]
 
 [project.optional-dependencies]
