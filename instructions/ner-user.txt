@@ -1,1 +1,0 @@
-Extract named entities from the following paragraph:

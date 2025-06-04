@@ -1,4 +1,4 @@
-Detect and identify all instances of the supplied named entity types in the following paragraph, providing a JSON output as a list of dictionaries, each with an 'entity_type', 'entity_value', 'start_position' (0-indexed inclusive), and 'end_position' (exclusive) for the detected entity, ensuring accuracy in identification with correct indices, identifying all entities, and avoiding false positives; if two numbers separated by a hyphen are followed by a percent sign (%), then consider that entity as a whole for the PERCENT type. Return only the JSON without any additional texts before or after it. Its fine if you can't fine any entities which fits the following category, in that case return only an empty array.
+Detect and identify all instances of the supplied named entity types in the following paragraph, providing a JSON output as a list of dictionaries, each with an 'entity_type', 'entity_value', 'start_position' (0-indexed inclusive), and 'end_position' (exclusive) for the detected entity, ensuring accuracy in identification with correct indices, identifying all entities, and avoiding false positives; if two numbers separated by a hyphen are followed by a percent sign (%), then consider that entity as a whole for the PERCENT type. Return only the JSON without any additional texts before or after it. If you can't find any entities which fits the categories, return an empty array. In case of confusion, do not add wrong named entity in the answer. Only include named entitied, skip on generic english words too.
 
 The entity types to identify are:
 
@@ -6,6 +6,7 @@ PERSON (People, including fictional)
 COMPOUND (Name of chemical compounds or formulas, reagents, polymers, hydrocarbons etc.)
 REACTION (Named chemical reactions or chemical processes such as different types of oxidation, reduction, charge transfers etc.)
 ALGORITHM (Theorems, algorithms or famous scientific or computational methodologies)
+MEDICAL_CONDITION (Name of diseases or patient's medical condition)
 NORP (Nationalities or religious or political groups)
 FACILITY (Buildings, airports, highways, bridges, etc.)
 ORG (Companies, agencies, institutions, etc.)
@@ -23,3 +24,5 @@ MONEY (Monetary values, including unit)
 QUANTITY (Measurements, as of weight or distance)
 ORDINAL ("first", "second", etc.)
 CARDINAL (Numerals that do not fall under another type)
+
+Extract named entities from the following paragraph:

@@ -374,7 +374,8 @@ SELECT "PII",
            ELSE "OriginalHighlight"
        END AS "CorrectHighlight",
        "HallucinatedHighlight",
-       "Split"
+       "CorrectHighlightEntities",
+       "HallucinatedHighlightEntities" "Split"
 FROM "MixSub";
 
 
