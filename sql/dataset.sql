@@ -9,11 +9,10 @@
 --
 --     (SELECT COUNT(*) AS V
 --      FROM train) AS v;
---
--- --
 
 SELECT COUNT(*)
-FROM "MixSub";
+FROM "MixSub"
+WHERE "Split" = 'TRAIN';
 
 
 DELETE
@@ -34,7 +33,7 @@ WHERE LENGTH("CorrectHighlight") >= LENGTH("ArticleAbstract");
 
 
 SELECT *
-FROM "MixSubView"
+FROM "MixSub"
 ORDER BY RANDOM()
 LIMIT 3;
 
@@ -44,6 +43,11 @@ FROM "MixSub"
 WHERE "PII" IN ('S2666498425000146',
                 'S2666498425000365',
                 'S2666498425000237');
+
+
+SELECT *
+FROM "MixSub"
+WHERE "PII" = 'S2468312421000018';
 
 
 INSERT INTO "MixSub" ("PII",
@@ -58,6 +62,14 @@ FROM "MixSub"
 WHERE "PII" IN ('S2666498425000146',
                 'S2666498425000365',
                 'S2666498425000237');
+
+
+SELECT "MixSub"."PII" AS pii,
+       "MixSubView"."ArticleAbstract" AS abstract
+FROM "MixSubView"
+JOIN "MixSub" ON "MixSubView"."PII" = "MixSub"."PII"
+WHERE "MixSub"."QwenHighlight" IS NULL
+    AND "MixSub"."Split" = 'TEST' FETCH FIRST ROW ONLY;
 
 
 SELECT *
@@ -363,6 +375,9 @@ ALTER TABLE "MixSub" RENAME COLUMN "Abstract" TO "OriginalAbstract";
 ALTER TABLE "MixSub" RENAME COLUMN "Highlight" TO "OriginalHighlight";
 
 
+DROP VIEW "MixSubView";
+
+
 CREATE OR REPLACE VIEW "MixSubView" AS
 SELECT "PII",
        CASE
@@ -373,10 +388,62 @@ SELECT "PII",
            WHEN COALESCE(TRIM("BetterHighlight", '') != '') THEN "BetterHighlight"
            ELSE "OriginalHighlight"
        END AS "CorrectHighlight",
+       "ModelGeneratedHighlight" AS "LlamaHighlight",
        "HallucinatedHighlight",
        "CorrectHighlightEntities",
-       "HallucinatedHighlightEntities" "Split"
+       "HallucinatedHighlightEntities",
+       "Split"
 FROM "MixSub";
+
+EXPLAIN
+SELECT COUNT("PII")
+FROM
+    (SELECT "PII"
+     FROM "MixSub"
+     WHERE "ModelGeneratedHighlight" IS NOT NULL
+         AND "Split" = 'TEST'
+     ORDER BY "PII"
+     OFFSET 10000);
+
+
+SELECT "MixSub"."PII",
+       "MixSubView"."ArticleAbstract"
+FROM "MixSubView"
+JOIN "MixSub" ON "MixSubView"."PII" = "MixSub"."PII"
+WHERE "MixSub"."QwenHighlight" IS NULL
+    AND "MixSub"."Split" = 'TEST'
+LIMIT 4;
+
+
+SELECT "MixSub"."PII",
+       "MixSubView"."ArticleAbstract",
+       "MixSubView"."CorrectHighlight"
+FROM "MixSubView"
+JOIN "MixSub" ON "MixSubView"."PII" = "MixSub"."PII"
+WHERE "MixSub"."QwenHighlight" IS NULL
+    AND "MixSub"."Split" = 'TEST';
+
+
+ALTER TABLE "MixSub" ADD COLUMN "QwenHighlight" TEXT;
+
+
+ALTER TABLE "MixSub" RENAME COLUMN "ModelGeneratedHighlight" TO "LlamaHighlight";
+
+
+SELECT *
+FROM pg_indexes
+WHERE tablename = 'MixSub';
+
+
+SELECT msv."CorrectHighlight" AS reference,
+       ms."ModelGeneratedHighlight" AS prediction
+FROM "MixSubView" msv
+JOIN "MixSub" ms ON msv."PII" = ms."PII"
+WHERE ms."ModelGeneratedHighlight" IS NOT NULL
+    AND "Split" = 'TEST'
+ORDER BY ms."PII" ASC
+LIMIT 5
+OFFSET 10;
 
 
 ALTER TABLE "MixSub" ADD COLUMN "ModelGeneratedHighlight" TEXT;

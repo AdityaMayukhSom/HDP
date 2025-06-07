@@ -17,14 +17,14 @@ from unsloth.chat_templates import train_on_responses_only  # isort: skip
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
 
+from finetune.metrics import compute_metrics, preprocess_logits_for_metrics
+
 from src.hypermixsub import extract_hms_from_db
 from src.prompt import (
     prepare_hms_convos_for_fine_tuning,
     prepare_hms_prompts_for_fine_tuning,
 )
 from src.utils import get_postgresql_engine, load_dotenv_in_config
-
-from .metrics import compute_metrics, preprocess_logits_for_metrics
 
 
 def main(argv: list[str]):
@@ -34,7 +34,7 @@ def main(argv: list[str]):
 
     _t = FastLanguageModel.from_pretrained(
         model_name=config["HF_BASE_MODEL_REPO"],
-        max_seq_length=1024,
+        max_seq_length=2048,
         dtype=torch.bfloat16 if is_bfloat16_supported() else torch.float16,
         load_in_4bit=True,
         token=config["HF_TOKEN"],
@@ -44,13 +44,11 @@ def main(argv: list[str]):
     flm: LlamaForCausalLM = _t[0]
     tokenizer: PreTrainedTokenizerFast = _t[1]
 
-    dd = extract_hms_from_db(engine, load_full_in_train=True)
+    dd = extract_hms_from_db(engine)
     dd = prepare_hms_convos_for_fine_tuning(dd)
     dd = prepare_hms_prompts_for_fine_tuning(dd, tokenizer)
-    trn_ds, val_ds, tst_ds = dd["TRAIN"], dd["VALIDATION"], dd["TEST"]
 
-    # print(trn_ds[0]["conversations"])
-    # print(trn_ds[0]["text"])
+    trn_ds, val_ds, tst_ds = dd["TRAIN"], dd["VALIDATION"], dd["TEST"]
 
     model: PeftModelForCausalLM = FastLanguageModel.get_peft_model(
         flm,
@@ -105,17 +103,14 @@ def main(argv: list[str]):
             output_dir=config["MODEL_OUTPUT_DIR"],
             logging_dir=config["MODEL_LOGGING_DIR"],
             logging_steps=1,
-            # load_best_model_at_end=True,
-            # push_to_hub=True,
             hub_model_id=config["HF_TRAINED_MODEL_REPO"],
         ),
     )
 
     trainer = train_on_responses_only(
         trainer,
-        # tokenizer=tokenizer,
-        instruction_part="<|im_start|>user",
-        response_part="<|im_start|>assistant",
+        instruction_part="<|im_start|>user\n",
+        response_part="<|im_start|>assistant\n<think>\n\n</think>\n\n",
         num_proc=os.cpu_count(),
     )
 

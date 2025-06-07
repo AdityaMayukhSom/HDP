@@ -54,38 +54,10 @@ def extract_hms_from_db(
     return dd
 
 
-def insert_generated_highlight_into_db(
-    engine: sa.Engine,
-    piis: list[str],
-    highlights: list[str],
-):
-    insert_query = sa.text(
-        """
-        UPDATE "MixSub" 
-        SET "ModelGeneratedHighlight" = :highlight
-        WHERE "PII" = :pii
-        """
-    )
-
-    data = [
-        {
-            "pii": pii,
-            "highlight": highlight,
-        }
-        for pii, highlight in zip(piis, highlights)
-    ]
-
-    # logger.info(f"inserting {len(data)} rows\n\n{data}")
-
-    with engine.connect() as conn:
-        conn.execute(insert_query, data)
-        conn.commit()
-
-
 def publish_hms_to_hf():
     config = load_dotenv_in_config()
     engine = get_postgresql_engine()
-    ds = extract_hms_from_db(engine=engine)
+    ds = extract_hms_from_db(engine)
 
     ds.push_to_hub(
         repo_id=config["HF_HMS_REPO_ID"],

@@ -1,9 +1,11 @@
 import sys
 import time
-import sqlalchemy as sa
 from functools import lru_cache, wraps
+from urllib.parse import quote_plus
 
+import sqlalchemy as sa
 from dotenv import dotenv_values
+from pymongo import MongoClient
 
 
 def timer(start: float, end: float):
@@ -37,6 +39,24 @@ def get_postgresql_engine():
 
     engine = sa.create_engine(conn_url, pool_size=128, max_overflow=256)
     return engine
+
+
+@lru_cache
+def get_mongo_client():
+    config = load_dotenv_in_config()
+    uri = "mongodb://%s:%s@%s" % (
+        quote_plus(config["MONGO_USERNAME"]),
+        quote_plus(config["MONGO_PASSWORD"]),
+        config["MONGO_HOST"],
+    )
+    client = MongoClient(host=uri, port=int(config["MONGO_PORT"]))
+    return client
+
+
+def get_mongo_database(client: MongoClient):
+    config = load_dotenv_in_config()
+    db = client.get_database(config["MONGO_DATABASE"])
+    return db
 
 
 def logfile_enabled(prefix: str):

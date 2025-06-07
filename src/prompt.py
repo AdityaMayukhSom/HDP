@@ -3,6 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from datasets import Dataset, DatasetDict
+from loguru import logger
 from transformers import PreTrainedTokenizerFast
 
 
@@ -59,7 +60,6 @@ def create_summarizer_convo_for_fine_tuning(examples):
                 "content": highlight,
             },
         ]
-
         convos.append(convo)
 
     return {

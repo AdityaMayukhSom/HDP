@@ -52,11 +52,11 @@ class LLMModel:
     def get_max_length(self):
         return self.__model.config.max_position_embeddings
 
-    def get_diff_vocab(self, vocabProbs, tprob):
-        return (vocabProbs[0] - tprob).item()
+    def get_diff_vocab(self, vocab_probs, tprob):
+        return (vocab_probs[0] - tprob).item()
 
-    def get_diff_maximum_with_minimum(self, vocabProbs):
-        return (vocabProbs[0] - vocabProbs[-1]).item()
+    def get_diff_maximum_with_minimum(self, vocab_probs):
+        return (vocab_probs[0] - vocab_probs[-1]).item()
 
     def extract_features(self, *, knowledge: str, document: str, generated_text: str):
         """
@@ -116,17 +116,17 @@ class LLMModel:
 
         size = len(token_probs_generated)
         for pos in range(size):
-            vocabProbs = self.get_vocab_probs_at_pos(pos, conditional_probs)
+            vocab_probs = self.get_vocab_probs_at_pos(pos, conditional_probs)
             maximum_diff_with_vocab = max(
                 [
                     maximum_diff_with_vocab,
-                    self.get_diff_vocab(vocabProbs, token_probs_generated[pos]),
+                    self.get_diff_vocab(vocab_probs, token_probs_generated[pos]),
                 ]
             )
             minimum_vocab_extreme_diff = min(
                 [
                     minimum_vocab_extreme_diff,
-                    self.get_diff_maximum_with_minimum(vocabProbs),
+                    self.get_diff_maximum_with_minimum(vocab_probs),
                 ]
             )
 
@@ -198,3 +198,11 @@ class UnslothLLaMA(LLMModel):
         summary = self.tokenizer.decode(model_outputs[0], skip_special_token=True)
 
         return summary
+
+
+def main():
+    model = UnslothLLaMA()
+
+
+if __name__ == "__main__":
+    main()
