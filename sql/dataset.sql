@@ -184,6 +184,11 @@ WHERE "PII" = 'S0142941819313339';
 -- SET "BetterHighlight" = 'CARPET cosmic ray detector was installed at Riyadh (cut off rigidity Rc=14.4GV) Saudi Arabia.  This is a unique location for monitoring and studying the variations of CRs in the equatorial region.  Measurements from such place will provide the research community with useful information about the cosmic ray properties and variations.  One of the main goal of this detector is to study the CR variations and investigate their correlations with solar activity and atmospheric phenomena.  The detector performance was tested and showed comparable results to our existing 1m2 scintillator and multi-wire detectors.  Short term periodicities of the CR recorded by CARPET were investigated and found to be in good agreement with those reported by different researchers.'
 -- WHERE "PII" = 'S1364682620300146';
 
+SELECT "HallucinatedHighlight"
+FROM "MixSubView"
+WHERE "PII" = 'S000145751930942X';
+
+
 SELECT "PII",
        "OriginalHighlight",
        "BetterHighlight"
@@ -415,13 +420,26 @@ WHERE "MixSub"."QwenHighlight" IS NULL
 LIMIT 4;
 
 
-SELECT "MixSub"."PII",
-       "MixSubView"."ArticleAbstract",
-       "MixSubView"."CorrectHighlight"
+SELECT ms."PII",
+       msv."ArticleAbstract",
+       msv."CorrectHighlight",
+       msv."HallucinatedHighlight"
+FROM "MixSub" ms
+JOIN "MixSubView" msv ON ms."PII" = msv."PII"
+WHERE ms."HallucinatedHighlightEntities" IS NULL
+ORDER BY RANDOM() FETCH FIRST ROW ONLY
+FOR
+UPDATE SKIP LOCKED;
+
+
+SELECT "MixSub"."PII" AS pii,
+       "MixSubView"."ArticleAbstract" AS abstract
 FROM "MixSubView"
 JOIN "MixSub" ON "MixSubView"."PII" = "MixSub"."PII"
 WHERE "MixSub"."QwenHighlight" IS NULL
-    AND "MixSub"."Split" = 'TEST';
+    AND "MixSub"."Split" = 'TEST' FETCH FIRST ROW ONLY
+    FOR
+    UPDATE SKIP LOCKED;
 
 
 ALTER TABLE "MixSub" ADD COLUMN "QwenHighlight" TEXT;

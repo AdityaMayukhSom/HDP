@@ -13,7 +13,7 @@ from loguru import logger
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.utils import get_postgresql_engine
+from src.utils import get_postgresql_engine, load_dotenv_in_config
 
 os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
@@ -27,15 +27,13 @@ logger.add(
 )
 
 
-def generate_gemini_prompt(
-    instruction: str,
-    abstract: str,
-):
+def generate_gemini_prompt(instruction: str, document: str, summary: str):
     dat = {
-        "Document": abstract,
+        "Document": document,
+        "Summary": summary,
     }
 
-    prompt = f"{instruction}\n\n{json.dumps(dat, indent=4)}".strip()
+    prompt = f"{instruction}\n\n{json.dumps(dat, indent=2)}".strip()
     return prompt
 
 
@@ -54,9 +52,10 @@ def clean_json_markdown(md_text: str):
 def get_entities_from_gemini(
     instruction: str,
     document: str,
+    summary: str,
     client: genai.Client,
 ):
-    prompt = generate_gemini_prompt(instruction, document)
+    prompt = generate_gemini_prompt(instruction, document, summary)
     res = client.models.generate_content(
         model="gemini-2.0-flash",
         contents=prompt,
@@ -69,43 +68,76 @@ def get_entities_from_gemini(
 
 def generate_datapoint_entities(
     instruction: str,
+    abstract: str,
     c_highlight: str,
     h_highlight: str,
     client: genai.Client,
-) -> dict[str, str]:
-    ch_ent = get_entities_from_gemini(instruction, c_highlight, client)
-    hh_ent = get_entities_from_gemini(instruction, h_highlight, client)
+) -> tuple[str, str]:
+    # Correct Highlight Entities
+    ch_ent = get_entities_from_gemini(instruction, abstract, c_highlight, client)
 
-    return {
-        "CorrectHighlightEntities": ch_ent,
-        "HallucinatedHighlightEntities": hh_ent,
-    }
+    # Hallucinated Highlight Entities
+    hh_ent = get_entities_from_gemini(instruction, abstract, h_highlight, client)
+
+    return ch_ent, hh_ent
+
+
+_TODO_COUNT_QUERY = """\
+SELECT COUNT(*) AS "TODO" 
+FROM "MixSub" 
+WHERE "HallucinatedHighlightEntities" IS NULL
+"""
+
+_DATAPOINT_EXTRACT_QUERY = """\
+SELECT ms."PII" AS pii,
+       msv."ArticleAbstract" AS abstract,
+       msv."CorrectHighlight" AS c_highlight,
+       msv."HallucinatedHighlight" AS h_highlight
+FROM "MixSub" ms
+JOIN "MixSubView" msv ON ms."PII" = msv."PII"
+WHERE ms."HallucinatedHighlightEntities" IS NULL
+ORDER BY RANDOM() 
+FETCH FIRST ROW ONLY
+FOR UPDATE SKIP LOCKED
+"""
+
+_UPDATE_ENTITIES_QUERY = """
+UPDATE "MixSub" 
+SET "CorrectHighlightEntities" = :CorrectHighlightEntities,
+    "HallucinatedHighlightEntities" = :HallucinatedHighlightEntities
+WHERE "PII" = :PII
+"""
+
+
+_LOG_MSG_AND_ENT_FORMAT = """
+PII :: {}
+
+Abstract:
+{}
+
+Correct Highlight:
+{}
+
+Correct Highlight Entities: 
+{}
+
+Hallucinated Highlight:
+{}
+
+Hallucinated Highlight Entities:
+{}
+
+STATUS :: SUCCESS
+SLEEP :: {} SECONDS
+"""
 
 
 def extract_and_save(key: str, instr: str, engine: sa.Engine):
     logger.info(f"called extract and save for key {key}")
     client = genai.Client(api_key=key)
 
-    extract_query = sa.text(
-        """
-        SELECT *
-        FROM "MixSub"
-        WHERE "HallucinatedHighlightEntities" IS NULL
-        ORDER BY RANDOM() 
-        FETCH FIRST ROW ONLY
-        FOR UPDATE 
-        SKIP LOCKED
-        """
-    )
-
-    updt_query = sa.text(
-        """
-        UPDATE "MixSub" 
-        SET "CorrectHighlightEntities" = :CorrectHighlightEntities,
-            "HallucinatedHighlightEntities" = :HallucinatedHighlightEntities
-        WHERE "PII" = :PII
-        """
-    )
+    extract_query = sa.text(_DATAPOINT_EXTRACT_QUERY)
+    updt_query = sa.text(_UPDATE_ENTITIES_QUERY)
 
     updt_cnt = 0
     unit_delay = 180
@@ -119,88 +151,63 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
                 if d is None:
                     break
             except Exception as e:
-                logger.error(f"\nError with key {key} during fetch\n{str(e)}")
+                logger.error(f"ERROR DURING DB FETCH WITH API KEY :: {key}", e)
                 conn.commit()
                 break
 
-            pii = d["PII"]
-            abstract = (
-                d["BetterAbstract"]
-                if d["BetterAbstract"] is not None
-                else d["OriginalAbstract"]
-            )
-            c_highlight = (
-                d["BetterHighlight"]
-                if d["BetterHighlight"] is not None
-                else d["OriginalHighlight"]
-            )
-            h_highlight = d["HallucinatedHighlight"]
+            pii = d["pii"]
+            abstract = d["abstract"]
+            c_highlight = d["c_highlight"]
+            h_highlight = d["h_highlight"]
+
             logger.info(f"starting extraction for {pii}")
 
-            dat = {
-                "PII": pii,
-                "CorrectHighlightEntities": [],
-                "HallucinatedHighlightEntities": [],
-            }
-
             try:
-                res = generate_datapoint_entities(
+                ch_ent, hh_ent = generate_datapoint_entities(
                     instr,
+                    abstract,
                     c_highlight,
                     h_highlight,
                     client,
                 )
-            except Exception as e:
-                logger.error(f"\nError with key {key}\n{str(e)}")
-                logger.warning(f"PII: {pii}, STATUS: FAILED, SLEEP {unit_delay} SEC...")
-                time.sleep(unit_delay)
 
-                # put garbage value so that it won't be used later
-                conn.execute(updt_query, dat)
-                conn.commit()
-                continue
+                logger.success(
+                    dedent(_LOG_MSG_AND_ENT_FORMAT).format(
+                        pii,
+                        abstract,
+                        c_highlight,
+                        ch_ent,
+                        h_highlight,
+                        hh_ent,
+                        unit_delay,
+                    )
+                )
 
-            dat = {
-                "PII": pii,
-                "CorrectHighlightEntities": res["CorrectHighlightEntities"],
-                "HallucinatedHighlightEntities": res["HallucinatedHighlightEntities"],
-            }
+                # conn.execute(
+                #     updt_query,
+                #     {
+                #         "PII": pii,
+                #         "CorrectHighlightEntities": ch_ent,
+                #         "HallucinatedHighlightEntities": hh_ent,
+                #     },
+                # )
 
-            msg = """
-            PII: {}
-            
-            Correct Highlight:
-            {}
-
-            Correct Highlight Entities: 
-            {}
-            
-            Hallucinated Highlight:
-            {}
-
-            Hallucinated Highlight Entities:
-            {}
-            
-            STATUS: SUCCESS
-            SLEEP {} SEC...
-            """
-
-            log_msg = dedent(msg).format(
-                pii,
-                c_highlight,
-                res["CorrectHighlightEntities"],
-                h_highlight,
-                res["HallucinatedHighlightEntities"],
-                unit_delay,
-            )
-            logger.success(log_msg)
-
-            try:
-                # conn.execute(updt_query, dat)
                 updt_cnt += 1
             except Exception as e:
-                logger.error(f"\nError with key {key}\n{str(e)}")
-                logger.warning(f"PII: {pii}, STATUS: FAILED, SLEEP {unit_delay} SEC...")
+                logger.error(
+                    f"ERROR WITH API KEY {key} WITH PII {pii}, SLEEP {unit_delay} SECONDS",
+                    e,
+                )
+
+                # put garbage value so that it won't be used later
+                conn.execute(
+                    updt_query,
+                    {
+                        "PII": pii,
+                        "CorrectHighlightEntities": [],
+                        "HallucinatedHighlightEntities": [],
+                    },
+                )
             finally:
                 conn.commit()
                 time.sleep(unit_delay)
@@ -208,31 +215,26 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
             break
 
     logger.success(
-        f"finished generating hallucinated highlights for key {key} with update count {updt_cnt}"
+        f"FINISHED EXTRACTING ENTITIES WITH API KEY :: {key}, EXTRACTION COUNT :: {updt_cnt}"
     )
 
 
 def main(argv: list[str]):
     engine = get_postgresql_engine()
+    conf = load_dotenv_in_config()
+
     keys = pathlib.Path("keys.txt").read_text(encoding="utf-8").strip().split("\n")
     keys = set(filter(lambda x: x.strip() != "", keys))
 
-    instr = pathlib.Path("./instructions/gemini-ner.txt").read_text(encoding="utf-8")
-
     with engine.connect() as conn:
-        todo_query = sa.text(
-            """
-            SELECT COUNT(*) AS "TODO" 
-            FROM "MixSub" 
-            WHERE "HallucinatedHighlightEntities" IS NULL
-            """
-        )
+        todo_query = sa.text(_TODO_COUNT_QUERY)
         res = conn.execute(todo_query).mappings().fetchone()
         todo_cnt = int(res["TODO"])
 
-        logger.info(f"TODO: generate hallucinated highlight for {todo_cnt} datapoints")
+        logger.info(f"TODO :: EXTRACT ENTITIES FOR {todo_cnt} DATAPOINTS.")
 
-    extract_and_save("AIzaSyB6nVwHOQiRvuBIp97azwisiqefxykGZGg", instr, engine)
+    # instr = pathlib.Path("./instructions/gemini-ner.txt").read_text(encoding="utf-8")
+    # extract_and_save(conf["GEMINI_API_KEY"], instr, engine)
 
     # ts = [
     #     threading.Thread(target=extract_and_save, args=(key, instr, engine))
@@ -245,20 +247,20 @@ def main(argv: list[str]):
     # for t in ts:
     #     t.join()
 
-    logger.success("finished hallucinated highlight generation")
+    logger.success("FINISHED EXTRACTING ENTITIES")
 
-    # with (
-    #     open("./instructions/gemini.txt", "r", encoding="utf-8") as instruction_file,
-    #     open("./data/example-abstract.txt", "r", encoding="utf-8") as abstract_file,
-    #     open("./data/example-highlight.txt", "r", encoding="utf-8") as highlight_file,
-    #     open("./data/gemini-prompt.txt", "w", encoding="utf-8") as prompt_file,
-    # ):
-    #     prompt = generate_hallucinated_highlight(
-    #         instruction=instruction_file.read(),
-    #         abstract=abstract_file.read(),
-    #         correct_highlight=highlight_file.read(),
-    #     )
-    #     prompt_file.write(prompt)
+    with (
+        open("./instructions/gemini-ner.txt", "r", encoding="utf-8") as instr_file,
+        open("./data/example-abstract.txt", "r", encoding="utf-8") as abstract_file,
+        open("./data/example-highlight.txt", "r", encoding="utf-8") as highlight_file,
+        open("./data/gemini-prompt.txt", "w", encoding="utf-8") as prompt_file,
+    ):
+        prompt = generate_gemini_prompt(
+            instruction=instr_file.read().strip(),
+            document=abstract_file.read().strip(),
+            summary=highlight_file.read().strip(),
+        )
+        prompt_file.write(prompt)
 
 
 if __name__ == "__main__":

@@ -155,7 +155,9 @@ def main(argv: list[str]):
     keys = pathlib.Path("keys.txt").read_text(encoding="utf-8").strip().split("\n")
     keys = set(filter(lambda x: x.strip() != "", keys))
 
-    instr = pathlib.Path("./instructions/gemini.txt").read_text(encoding="utf-8")
+    instr = pathlib.Path(
+        "./instructions/gemini-hallucination.txt",
+    ).read_text(encoding="utf-8")
 
     with engine.connect() as conn:
         todo_query = sa.text(
@@ -180,7 +182,7 @@ def main(argv: list[str]):
     logger.success("finished hallucinated highlight generation")
 
     # with (
-    #     open("./instructions/gemini.txt", "r", encoding="utf-8") as instruction_file,
+    #     open("./instructions/gemini-hallucination.txt", "r", encoding="utf-8") as instruction_file,
     #     open("./data/example-abstract.txt", "r", encoding="utf-8") as abstract_file,
     #     open("./data/example-highlight.txt", "r", encoding="utf-8") as highlight_file,
     #     open("./data/gemini-prompt.txt", "w", encoding="utf-8") as prompt_file,

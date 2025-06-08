@@ -106,7 +106,6 @@ FROM "MixSubView"
 JOIN "MixSub" ON "MixSubView"."PII" = "MixSub"."PII"
 WHERE "MixSub"."QwenHighlight" IS NULL
     AND "MixSub"."Split" = :split
-ORDER BY RANDOM()
 FETCH FIRST ROW ONLY
 """
 

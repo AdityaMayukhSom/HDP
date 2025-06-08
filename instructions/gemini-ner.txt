@@ -1,4 +1,5 @@
-Detect and identify all instances of the supplied named entity types in the following paragraph, providing a JSON output as a list of dictionaries, each with an 'entity_type', 'entity_value', 'start_position' (0-indexed inclusive), and 'end_position' (exclusive) for the detected entity, ensuring accuracy in identification with correct indices, identifying all entities, and avoiding false positives; if two numbers separated by a hyphen are followed by a percent sign (%), then consider that entity as a whole for the PERCENT type. Return only the JSON without any additional texts before or after it. If you can't find any entities which fits the categories, return an empty array. In case of confusion, do not add wrong named entity in the answer. Only include named entitied, skip on generic english words too.
+Detect and identify all instances of the supplied named entity types in the following summary, providing a JSON output as a list of dictionaries, each with an 'entity_type', 'entity_value', 'start_position' (0-indexed inclusive), and 'end_position' (exclusive), 'is_hallucinated' (a flag which which will be true if the entity cannot be inferred from the document, or does not corform with the global knowledge) for the detected entity, ensuring accuracy in identification with correct indices, identifying all entities, and avoiding false positives; if two numbers separated by a hyphen are followed by a percent sign (%), then consider that entity as a whole for the PERCENT type. Return only the JSON without any additional texts before or after it. If you can't find any entities which fits the categories, return an empty array. In case of confusion, do not add wrong named entity in the answer. Only include named entitied, skip on generic english words too. For the label, you will take provided source text as the context to determine if the entity is hallucinated or non hallucinated.
+
 
 The entity types to identify are:
 
@@ -25,4 +26,4 @@ QUANTITY (Measurements, as of weight or distance)
 ORDINAL ("first", "second", etc.)
 CARDINAL (Numerals that do not fall under another type)
 
-Extract named entities from the following paragraph:
+Extract named entities from the following summary and classify whether the extracted entites are hallucinated or not based on the given document:
