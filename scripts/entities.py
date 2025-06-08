@@ -19,11 +19,11 @@ os.environ["TZ"] = "Asia/Kolkata"
 time.tzset()
 
 logger.add(
-    "./logs/gemini/outputfile_{time:YYYY_MM_DD_hh_mm}.log",
+    "./logs/entity/gemini_{time:YYYY_MM_DD_hh_mm}.log",
     colorize=False,
     backtrace=True,
     diagnose=True,
-    rotation="1 MB",
+    rotation="5 MB",
 )
 
 
@@ -96,24 +96,19 @@ SELECT ms."PII" AS pii,
 FROM "MixSub" ms
 JOIN "MixSubView" msv ON ms."PII" = msv."PII"
 WHERE ms."HallucinatedHighlightEntities" IS NULL
-ORDER BY RANDOM() 
 FETCH FIRST ROW ONLY
 FOR UPDATE SKIP LOCKED
 """
 
-_UPDATE_ENTITIES_QUERY = """
+_UPDATE_ENTITIES_QUERY = """\
 UPDATE "MixSub" 
 SET "CorrectHighlightEntities" = :CorrectHighlightEntities,
     "HallucinatedHighlightEntities" = :HallucinatedHighlightEntities
 WHERE "PII" = :PII
 """
 
-
 _LOG_MSG_AND_ENT_FORMAT = """
 PII :: {}
-
-Abstract:
-{}
 
 Correct Highlight:
 {}
@@ -140,7 +135,7 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
     updt_query = sa.text(_UPDATE_ENTITIES_QUERY)
 
     updt_cnt = 0
-    unit_delay = 180
+    unit_delay = 120
 
     with engine.connect() as conn:
         while True:
@@ -151,7 +146,7 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
                 if d is None:
                     break
             except Exception as e:
-                logger.error(f"ERROR DURING DB FETCH WITH API KEY :: {key}", e)
+                logger.error(f"ERROR DURING DB FETCH WITH API KEY :: {key}\n{str(e)}")
                 conn.commit()
                 break
 
@@ -160,7 +155,7 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
             c_highlight = d["c_highlight"]
             h_highlight = d["h_highlight"]
 
-            logger.info(f"starting extraction for {pii}")
+            logger.info(f"STARTING EXTRACTION FOR PII :: {pii}")
 
             try:
                 ch_ent, hh_ent = generate_datapoint_entities(
@@ -174,7 +169,6 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
                 logger.success(
                     dedent(_LOG_MSG_AND_ENT_FORMAT).format(
                         pii,
-                        abstract,
                         c_highlight,
                         ch_ent,
                         h_highlight,
@@ -183,20 +177,19 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
                     )
                 )
 
-                # conn.execute(
-                #     updt_query,
-                #     {
-                #         "PII": pii,
-                #         "CorrectHighlightEntities": ch_ent,
-                #         "HallucinatedHighlightEntities": hh_ent,
-                #     },
-                # )
+                conn.execute(
+                    updt_query,
+                    {
+                        "PII": pii,
+                        "CorrectHighlightEntities": ch_ent,
+                        "HallucinatedHighlightEntities": hh_ent,
+                    },
+                )
 
                 updt_cnt += 1
             except Exception as e:
                 logger.error(
-                    f"ERROR WITH API KEY {key} WITH PII {pii}, SLEEP {unit_delay} SECONDS",
-                    e,
+                    f"ERROR: API KEY {key}, PII {pii}, SLEEP {unit_delay} SECONDS\n{str(e)}",
                 )
 
                 # put garbage value so that it won't be used later
@@ -212,8 +205,6 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
                 conn.commit()
                 time.sleep(unit_delay)
 
-            break
-
     logger.success(
         f"FINISHED EXTRACTING ENTITIES WITH API KEY :: {key}, EXTRACTION COUNT :: {updt_cnt}"
     )
@@ -221,10 +212,9 @@ def extract_and_save(key: str, instr: str, engine: sa.Engine):
 
 def main(argv: list[str]):
     engine = get_postgresql_engine()
-    conf = load_dotenv_in_config()
 
     keys = pathlib.Path("keys.txt").read_text(encoding="utf-8").strip().split("\n")
-    keys = set(filter(lambda x: x.strip() != "", keys))
+    keys = set(filter(lambda x: x.strip() != "" and not x.startswith("#"), keys))
 
     with engine.connect() as conn:
         todo_query = sa.text(_TODO_COUNT_QUERY)
@@ -233,34 +223,38 @@ def main(argv: list[str]):
 
         logger.info(f"TODO :: EXTRACT ENTITIES FOR {todo_cnt} DATAPOINTS.")
 
-    # instr = pathlib.Path("./instructions/gemini-ner.txt").read_text(encoding="utf-8")
+    instr = pathlib.Path("./instructions/gemini-ner.txt").read_text(encoding="utf-8")
+
+    # conf = load_dotenv_in_config()
     # extract_and_save(conf["GEMINI_API_KEY"], instr, engine)
 
-    # ts = [
-    #     threading.Thread(target=extract_and_save, args=(key, instr, engine))
-    #     for key in keys
-    # ]
+    ts = [
+        threading.Thread(target=extract_and_save, args=(key, instr, engine))
+        for key in keys
+    ]
 
-    # for t in ts:
-    #     t.start()
+    for t in ts:
+        # Each thread starts with 1 second delay in between
+        time.sleep(1)
+        t.start()
 
-    # for t in ts:
-    #     t.join()
+    for t in ts:
+        t.join()
 
     logger.success("FINISHED EXTRACTING ENTITIES")
 
-    with (
-        open("./instructions/gemini-ner.txt", "r", encoding="utf-8") as instr_file,
-        open("./data/example-abstract.txt", "r", encoding="utf-8") as abstract_file,
-        open("./data/example-highlight.txt", "r", encoding="utf-8") as highlight_file,
-        open("./data/gemini-prompt.txt", "w", encoding="utf-8") as prompt_file,
-    ):
-        prompt = generate_gemini_prompt(
-            instruction=instr_file.read().strip(),
-            document=abstract_file.read().strip(),
-            summary=highlight_file.read().strip(),
-        )
-        prompt_file.write(prompt)
+    # with (
+    #     open("./instructions/gemini-ner.txt", "r", encoding="utf-8") as instr_file,
+    #     open("./data/example-abstract.txt", "r", encoding="utf-8") as abstract_file,
+    #     open("./data/example-highlight.txt", "r", encoding="utf-8") as highlight_file,
+    #     open("./data/gemini-prompt.txt", "w", encoding="utf-8") as prompt_file,
+    # ):
+    #     prompt = generate_gemini_prompt(
+    #         instruction=instr_file.read().strip(),
+    #         document=abstract_file.read().strip(),
+    #         summary=highlight_file.read().strip(),
+    #     )
+    #     prompt_file.write(prompt)
 
 
 if __name__ == "__main__":

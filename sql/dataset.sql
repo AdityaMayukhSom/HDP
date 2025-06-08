@@ -32,6 +32,22 @@ FROM "MixSubView"
 WHERE LENGTH("CorrectHighlight") >= LENGTH("ArticleAbstract");
 
 
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE "HallucinatedHighlightEntities" IS NOT NULL
+    AND "HallucinatedHighlightEntities" NOT IN ('[]',
+                                                '{}')
+    AND "HallucinatedHighlightEntities" IS NOT NULL
+    AND "CorrectHighlightEntities" NOT IN ('[]',
+                                           '{}');
+
+
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE "MixSubView"."HallucinatedHighlightEntities" = '[]'
+    OR "MixSubView"."CorrectHighlightEntities" = '[]';
+
+
 SELECT *
 FROM "MixSub"
 ORDER BY RANDOM()
@@ -184,9 +200,74 @@ WHERE "PII" = 'S0142941819313339';
 -- SET "BetterHighlight" = 'CARPET cosmic ray detector was installed at Riyadh (cut off rigidity Rc=14.4GV) Saudi Arabia.  This is a unique location for monitoring and studying the variations of CRs in the equatorial region.  Measurements from such place will provide the research community with useful information about the cosmic ray properties and variations.  One of the main goal of this detector is to study the CR variations and investigate their correlations with solar activity and atmospheric phenomena.  The detector performance was tested and showed comparable results to our existing 1m2 scintillator and multi-wire detectors.  Short term periodicities of the CR recorded by CARPET were investigated and found to be in good agreement with those reported by different researchers.'
 -- WHERE "PII" = 'S1364682620300146';
 
-SELECT "HallucinatedHighlight"
+SELECT *
 FROM "MixSubView"
-WHERE "PII" = 'S000145751930942X';
+WHERE "PII" = 'S0043135419309042';
+
+
+SELECT COUNT(*)
+FROM "MixSubView";
+
+
+SELECT COUNT(*)
+FROM "MixSubView";
+
+
+DELETE
+FROM "MixSub"
+WHERE "PII" IN
+        (SELECT "PII"
+         FROM "MixSubView"
+         WHERE ("ArticleAbstract" IS NULL
+                OR LENGTH("ArticleAbstract") >= 2700
+                OR "CorrectHighlight" IS NULL
+                OR LENGTH("CorrectHighlight") >= 800));
+
+
+SELECT "PII",
+       "ArticleAbstract",
+       "Split",
+       "CorrectHighlight",
+       "CorrectHighlightEntities",
+       "HallucinatedHighlight",
+       "HallucinatedHighlightEntities"
+FROM "MixSubView"
+WHERE "HallucinatedHighlightEntities" IS NOT NULL
+    AND "HallucinatedHighlightEntities" != '[]'
+ORDER BY "PII" ASC
+LIMIT 1200
+OFFSET 0;
+
+
+SELECT AVG(LENGTH("ArticleAbstract")) AS "AverageAbstractLength",
+       AVG(LENGTH("CorrectHighlight")) AS "AverageHighlightLength"
+FROM "MixSubView";
+
+
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE "HallucinatedHighlightEntities" IS NOT NULL
+    AND "HallucinatedHighlightEntities" != '[]';
+
+
+SELECT COUNT("PII")
+FROM "MixSubView"
+WHERE (("ArticleAbstract" IS NULL
+        OR LENGTH("ArticleAbstract") >= 2600)
+       AND ("CorrectHighlight" IS NULL
+            OR LENGTH("CorrectHighlight") >= 800));
+
+
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE "HallucinatedHighlightEntities" IS NOT NULL
+    AND "HallucinatedHighlightEntities" != '[]';
+
+
+UPDATE "MixSub"
+SET "HallucinatedHighlightEntities" = NULL,
+    "CorrectHighlightEntities" = NULL
+WHERE "PII" = 'S0043135419309042';
 
 
 SELECT "PII",

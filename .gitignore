@@ -17,6 +17,6 @@ data/
 logs/
 emissions/
 pretrained/
-keys.txt
+keys*.txt
 .idea
 .vscode

@@ -1,14 +1,16 @@
-Detect and identify all instances of the supplied named entity types in the following summary, providing a JSON output as a list of dictionaries, each with an 'entity_type', 'entity_value', 'start_position' (0-indexed inclusive), and 'end_position' (exclusive), 'is_hallucinated' (a flag which which will be true if the entity cannot be inferred from the document, or does not corform with the global knowledge) for the detected entity, ensuring accuracy in identification with correct indices, identifying all entities, and avoiding false positives; if two numbers separated by a hyphen are followed by a percent sign (%), then consider that entity as a whole for the PERCENT type. Return only the JSON without any additional texts before or after it. If you can't find any entities which fits the categories, return an empty array. In case of confusion, do not add wrong named entity in the answer. Only include named entitied, skip on generic english words too. For the label, you will take provided source text as the context to determine if the entity is hallucinated or non hallucinated.
-
+Detect and identify all instances of the supplied named entity types in the following summary, providing a JSON output as a list of dictionaries, each with an 'entity_type', 'entity_value', 'start_position' (0-indexed inclusive), and 'end_position' (exclusive), 'is_hallucinated' (a flag which which will be true if the entity cannot be inferred from the document, does not corform with the global knowledge, or is outright wrong) for the detected entities, ensuring accuracy in identification with correct indices, identifying all entities, and avoiding false positives; if two numbers separated by a hyphen are followed by a percent sign (%), then consider that entity as a whole for the PERCENT type. Return only the JSON without any additional texts before or after it. If you can't find any entities which fits the categories, return an empty array. In case of confusion, do not add wrong named entity. Only include named entitied. Do not consider basic english words as named entities. For the 'is_hallucinated' label, you will take provided document as context to determine if the entity is hallucinated or non hallucinated. In case of checmical compounds, consider it's common name and chemical formula to be equivalent.
 
 The entity types to identify are:
 
-PERSON (People, including fictional)
-COMPOUND (Name of chemical compounds or formulas, reagents, polymers, hydrocarbons etc.)
-REACTION (Named chemical reactions or chemical processes such as different types of oxidation, reduction, charge transfers etc.)
+PERSON (People, famous personalities, including fictional)
+COMPOUND (Formulas or name of chemical compounds, reagents, polymers, hydrocarbons etc.)
+REACTION (Named chemical reactions or processes such as oxidation, reduction, charge transfers etc.)
 ALGORITHM (Theorems, algorithms or famous scientific or computational methodologies)
+TECHNIQUE (Any techniques or methods (Microtomography, Spectroscopy, Cardiography, Cartography, Cinematography etc.))
 MEDICAL_CONDITION (Name of diseases or patient's medical condition)
 NORP (Nationalities or religious or political groups)
+GEO_DIRECTION (North, South, East, West etc.)
+DIMENSION (2D, 3D, 4D etc.)
 FACILITY (Buildings, airports, highways, bridges, etc.)
 ORG (Companies, agencies, institutions, etc.)
 GPE (Countries, cities, states)
@@ -18,6 +20,7 @@ EVENT (Named hurricanes, battles, wars, sports events, etc.)
 WORK_OF_ART (Titles of books, songs, etc.)
 LAW (Named documents made into laws)
 LANGUAGE (Any named language)
+PROGRAMMING_LANGUAGE (eg. Java, C++, Python etc.)
 DATE (Absolute or relative dates or periods)
 TIME (Times smaller than a day)
 PERCENT (Percentage, including "%")
@@ -26,4 +29,4 @@ QUANTITY (Measurements, as of weight or distance)
 ORDINAL ("first", "second", etc.)
 CARDINAL (Numerals that do not fall under another type)
 
-Extract named entities from the following summary and classify whether the extracted entites are hallucinated or not based on the given document:
+Extract named entities from the following summary and classify them based on the above instruction:
