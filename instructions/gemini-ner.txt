@@ -4,6 +4,9 @@ The entity types to identify are:
 
 PERSON (People, famous personalities, including fictional)
 COMPOUND (Formulas or name of chemical compounds, reagents, polymers, hydrocarbons etc.)
+THEORETICAL_CONCEPT (Cognitive Dissonance, Social Exchange, Loyalty Antecedents etc.)
+BEHAVIORAL_METRIC (Repurchase Intention, Customer Churn Rate, Time on Page etc)
+ELECTRONIC_DEVICE (Laptop, Mobile, Television, Smartphone etc.)
 REACTION (Named chemical reactions or processes such as oxidation, reduction, charge transfers etc.)
 ALGORITHM (Theorems, algorithms or famous scientific or computational methodologies)
 TECHNIQUE (Any techniques or methods (Microtomography, Spectroscopy, Cardiography, Cartography, Cinematography etc.))
