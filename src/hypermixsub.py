@@ -10,6 +10,15 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 from src.utils import get_postgresql_engine, load_dotenv_in_config
 
+_HMS_DB_EXTRACTION_QUERY = """\
+SELECT "PII",
+       "ArticleAbstract",
+       "CorrectHighlight",
+       "HallucinatedHighlight"
+FROM "MixSubView"
+WHERE "Split" = :split;
+"""
+
 
 def extract_hms_from_db(
     engine: sa.Engine,
@@ -18,11 +27,7 @@ def extract_hms_from_db(
     load_full_in_train=False,
 ) -> DatasetDict:
     if query is None:
-        query = """\
-        SELECT "PII", "ArticleAbstract", "CorrectHighlight", "HallucinatedHighlight" 
-        FROM "MixSubView" 
-        WHERE "Split" = :split
-        """
+        query = _HMS_DB_EXTRACTION_QUERY
 
     extract_query = sa.text(query)
 
@@ -54,23 +59,20 @@ def extract_hms_from_db(
     return dd
 
 
-def publish_hms_to_hf():
+def publish_hms_to_hf(commit_message: str):
     config = load_dotenv_in_config()
     engine = get_postgresql_engine()
     ds = extract_hms_from_db(engine)
 
     ds.push_to_hub(
-        repo_id=config["HF_HMS_REPO_ID"],
+        repo_id=config["HF_MSV2_REPO_ID"],
         token=config["HF_TOKEN"],
         private=False,
-        commit_message="added hallucinated highlight for new datapoints",
+        commit_message=commit_message,
     )
 
 
-def extract_entities_to_json(limit: int, offset: int, json_path: str):
-    engine = get_postgresql_engine()
-
-    q = sa.text("""\
+_EXTRACT_ENTITES_FOR_NER_JSON_QUERY = """\
 SELECT "PII",
        "ArticleAbstract",
        "Split",
@@ -84,7 +86,13 @@ WHERE "HallucinatedHighlightEntities" IS NOT NULL
 ORDER BY "PII" ASC
 LIMIT :limit
 OFFSET :offset
-""")
+"""
+
+
+def extract_entities_to_json(limit: int, offset: int, json_path: str):
+    engine = get_postgresql_engine()
+
+    q = sa.text(_EXTRACT_ENTITES_FOR_NER_JSON_QUERY)
 
     with engine.connect() as conn:
         df = pd.read_sql_query(
@@ -99,14 +107,18 @@ OFFSET :offset
         df.to_json(json_path, orient="records", indent=4)
 
 
+def main():
+    # extract_entities_to_json(400, 000, "./data/ner/debdut-hira-ner-01.json")
+    # extract_entities_to_json(400, 400, "./data/ner/debdut-hira-ner-02.json")
+    # extract_entities_to_json(400, 800, "./data/ner/debdut-hira-ner-03.json")
+    # extract_entities_to_json(400, 1200, "./data/ner/priyanka-dey-ner-01.json")
+    # extract_entities_to_json(400, 1600, "./data/ner/priyanka-dey-ner-02.json")
+    # extract_entities_to_json(400, 2000, "./data/ner/priyanka-dey-ner-03.json")
+    # extract_entities_to_json(400, 2400, "./data/ner/priyanka-dey-ner-04.json")
+    # extract_entities_to_json(400, 2800, "./data/ner/priyanka-dey-ner-05.json")
+    # extract_entities_to_json(400, 3200, "./data/ner/priyanka-dey-ner-06.json")
+    return
+
+
 if __name__ == "__main__":
-    extract_entities_to_json(400, 000, "./data/ner/debdut-hira-ner-01.json")
-    extract_entities_to_json(400, 400, "./data/ner/debdut-hira-ner-02.json")
-    extract_entities_to_json(400, 800, "./data/ner/debdut-hira-ner-03.json")
-    extract_entities_to_json(400, 1200, "./data/ner/priyanka-dey-ner-01.json")
-    extract_entities_to_json(400, 1600, "./data/ner/priyanka-dey-ner-02.json")
-    extract_entities_to_json(400, 2000, "./data/ner/priyanka-dey-ner-03.json")
-    extract_entities_to_json(400, 2400, "./data/ner/priyanka-dey-ner-04.json")
-    extract_entities_to_json(400, 2800, "./data/ner/priyanka-dey-ner-05.json")
-    extract_entities_to_json(400, 3200, "./data/ner/priyanka-dey-ner-06.json")
-    # publish_hms_to_hf()
+    main()

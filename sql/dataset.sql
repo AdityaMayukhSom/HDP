@@ -23,8 +23,7 @@ WHERE "PII" IN ('S2212054825000177',
 
 SELECT COUNT(*)
 FROM "MixSubView"
-WHERE LENGTH("CorrectHighlight") > 1000
-    OR LENGTH("ArticleAbstract") > 2800;
+WHERE LENGTH("HallucinatedHighlight") > 900;
 
 
 SELECT COUNT(*)
@@ -40,6 +39,19 @@ WHERE "HallucinatedHighlightEntities" IS NOT NULL
     AND "HallucinatedHighlightEntities" IS NOT NULL
     AND "CorrectHighlightEntities" NOT IN ('[]',
                                            '{}');
+
+
+SELECT "PII",
+       "ArticleAbstract",
+       "CorrectHighlight",
+       "HallucinatedHighlight"
+FROM "MixSubView"
+WHERE "Split" = 'TEST';
+
+
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE "HallucinatedHighlight" IS NULL;
 
 
 SELECT COUNT(*)
@@ -218,10 +230,11 @@ FROM "MixSub"
 WHERE "PII" IN
         (SELECT "PII"
          FROM "MixSubView"
-         WHERE ("ArticleAbstract" IS NULL
-                OR LENGTH("ArticleAbstract") >= 2700
-                OR "CorrectHighlight" IS NULL
-                OR LENGTH("CorrectHighlight") >= 800));
+         WHERE "ArticleAbstract" IS NULL
+             OR LENGTH("ArticleAbstract") >= 2700
+             OR "CorrectHighlight" IS NULL
+             OR LENGTH("CorrectHighlight") >= 800
+             OR LENGTH("HallucinatedHighlight") >= 900);
 
 
 SELECT "PII",
