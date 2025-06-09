@@ -408,6 +408,36 @@ const scrapDataFromPIIs = async (piis, browser, directlyFromSD = false) => {
         throw error;
     }
 };
+const TODO_QUERY_TEXT = `
+SELECT COUNT("PII") AS "TODO"
+FROM "MixSub"
+WHERE (("BetterHighlight" IS NULL
+        AND "OriginalHighlight" IS NULL)
+       OR ("OriginalAbstract" IS NULL
+           AND "BetterAbstract" IS NULL))
+    AND "IsProcessed" = FALSE
+`;
+
+const PII_QUERY_TEXT = `
+SELECT "PII"
+FROM "MixSub"
+WHERE (("BetterHighlight" IS NULL
+        AND "OriginalHighlight" IS NULL)
+       OR ("OriginalAbstract" IS NULL
+           AND "BetterAbstract" IS NULL))
+    AND "IsProcessed" = FALSE
+ORDER BY "PII"
+LIMIT $1
+`;
+
+const UPDATE_ABSTRACT_HIGHLIGHT_QUERY_TEXT = `
+UPDATE "MixSub"
+SET "Title" = $1,
+    "BetterAbstract" = $2,
+    "BetterHighlight" = $3,
+    "IsProcessed" = TRUE
+WHERE "PII" = $4
+`;
 
 const main = async () => {
     dotenv.config({
@@ -452,16 +482,7 @@ const main = async () => {
         /** @type {import("pg").QueryConfig<[number | string]>} */
         const piiQuery = {
             name: "fetch-batched-piis",
-            text: `
-            SELECT "PII"
-            FROM "MixSub"
-            WHERE LENGTH("OriginalAbstract") <= 600
-                AND "BetterAbstract" IS NULL
-                AND "IsProcessed" = FALSE
-            GROUP BY "PII"
-            ORDER BY LENGTH("OriginalAbstract") ASC
-            LIMIT $1
-            `,
+            text: PII_QUERY_TEXT,
             values: [batchSize],
         };
 
@@ -470,14 +491,7 @@ const main = async () => {
          */
         const updateAbstractHighlightQuery = {
             name: "update-abstract-highlight",
-            text: `
-            UPDATE "MixSub"
-            SET "Title" = $1,
-                "BetterAbstract" = $2,
-                "BetterHighlight" = $3,
-                "IsProcessed" = TRUE
-            WHERE "PII" = $4
-            `,
+            text: UPDATE_ABSTRACT_HIGHLIGHT_QUERY_TEXT,
         };
 
         /**
@@ -485,13 +499,7 @@ const main = async () => {
          */
         const todoQuery = {
             name: "todo-abstract-highlight",
-            text: `
-            SELECT COUNT("PII") AS "TODO"
-            FROM "MixSub"
-            WHERE LENGTH("OriginalAbstract") <= 600
-                AND "BetterAbstract" IS NULL
-                AND "IsProcessed" = FALSE;
-            `,
+            text: TODO_QUERY_TEXT,
         };
 
         const todoRes = await pool.query(todoQuery, []);

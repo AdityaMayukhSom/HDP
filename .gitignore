@@ -20,3 +20,4 @@ pretrained/
 keys*.txt
 .idea
 .vscode
+wandb

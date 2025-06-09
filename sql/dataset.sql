@@ -16,6 +16,15 @@ ALTER TABLE "MixSub" ADD COLUMN "IsProcessed" BOOLEAN DEFAULT FALSE;
 
 
 SELECT COUNT(*)
+FROM "MixSubView";
+
+
+SELECT *
+FROM "MixSubView"
+WHERE LENGTH("ArticleAbstract") <= LENGTH("CorrectHighlight");
+
+
+SELECT COUNT(*)
 FROM "MixSub"
 WHERE "Split" = 'TRAIN';
 
@@ -56,7 +65,7 @@ WHERE LENGTH("HallucinatedHighlight") > 900;
 
 SELECT COUNT(*)
 FROM "MixSubView"
-WHERE LENGTH("MixSubView"."ArticleAbstract") < LENGTH("MixSubView"."CorrectHighlight");                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+WHERE LENGTH("MixSubView"."ArticleAbstract") < LENGTH("MixSubView"."CorrectHighlight");
 
 -- UPDATE "MixSub"
 -- SET "HallucinatedHighlight" = NULL
@@ -67,6 +76,37 @@ SELECT COUNT(*)
 FROM "MixSubView"
 WHERE LENGTH("CorrectHighlight") >= LENGTH("ArticleAbstract")
     OR LENGTH("CorrectHighlight") < 95;
+
+
+SELECT COUNT(*)
+FROM "MixSubView";
+
+
+SELECT COUNT(*)
+FROM "MixSubV1";
+
+
+SELECT COUNT(Mv1."Filename")
+FROM "MixSubV1" AS Mv1
+WHERE Mv1."Filename" NOT IN
+        (SELECT Ms."PII"
+         FROM "MixSub" AS Ms);
+
+
+SELECT COUNT(ms."PII")
+FROM "MixSub" AS ms
+WHERE ms."PII" NOT IN
+        (SELECT msv1."Filename"
+         FROM "MixSubV1" AS msv1);
+
+
+SELECT COUNT("PII") AS "TODO"
+FROM "MixSub"
+WHERE (("BetterHighlight" IS NULL
+        AND "OriginalHighlight" IS NULL)
+       OR ("OriginalAbstract" IS NULL
+           AND "BetterAbstract" IS NULL))
+    AND "IsProcessed" = FALSE;
 
 
 SELECT *
@@ -263,7 +303,7 @@ FROM "MixSubView"
 WHERE "PII" = 'S0043135419309042';
 
 
-SELECT COUNT(*)
+SELECT MIN(LENGTH("CorrectHighlight"))
 FROM "MixSubView";
 
 
@@ -278,18 +318,11 @@ WHERE "PII" IN
          FROM "MixSubView"
          WHERE "ArticleAbstract" IS NULL
              OR LENGTH("ArticleAbstract") >= 2700
+             OR LENGTH("ArticleAbstract") <= 300
              OR "CorrectHighlight" IS NULL
              OR LENGTH("CorrectHighlight") >= 800
+             OR LENGTH("CorrectHighlight") <= 100
              OR LENGTH("HallucinatedHighlight") >= 900);
-
-
-SELECT COUNT(*)
-FROM "MixSubView";
-
-
-SELECT *
-FROM "MixSubView"
-WHERE "PII" = 'S0303264720300836';
 
 
 SELECT "PII",
