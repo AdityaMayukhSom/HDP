@@ -9,6 +9,11 @@
 --
 --     (SELECT COUNT(*) AS V
 --      FROM train) AS v;
+-- KEEP THIS ON TOP, IF BY CHANCE WHOLE SCRIPT IS RAN, THIS WILL
+-- THROW EXCEPTION AND STOP IT FROM PROCEEDING
+
+ALTER TABLE "MixSub" ADD COLUMN "IsProcessed" BOOLEAN DEFAULT FALSE;
+
 
 SELECT COUNT(*)
 FROM "MixSub"
@@ -21,6 +26,29 @@ WHERE "PII" IN ('S2212054825000177',
                 'S2212054825000219');
 
 
+SELECT "Split",
+       COUNT(*) AS "Count",
+       (COUNT(*) * 100.0 / SUM(COUNT(*)) OVER ()) AS "Percentage"
+FROM "MixSubView"
+GROUP BY "Split";
+
+
+SELECT COUNT("PII") AS "TODO"
+FROM "MixSub"
+WHERE LENGTH("OriginalAbstract") <= 600
+    AND "BetterAbstract" IS NULL
+    AND "IsProcessed" = FALSE;
+
+
+SELECT "PII"
+FROM "MixSub"
+WHERE LENGTH("OriginalAbstract") <= 600
+    AND "BetterAbstract" IS NULL
+    AND "IsProcessed" = FALSE
+GROUP BY "PII"
+ORDER BY LENGTH("OriginalAbstract") ASC;
+
+
 SELECT COUNT(*)
 FROM "MixSubView"
 WHERE LENGTH("HallucinatedHighlight") > 900;
@@ -28,7 +56,23 @@ WHERE LENGTH("HallucinatedHighlight") > 900;
 
 SELECT COUNT(*)
 FROM "MixSubView"
-WHERE LENGTH("CorrectHighlight") >= LENGTH("ArticleAbstract");
+WHERE LENGTH("MixSubView"."ArticleAbstract") < LENGTH("MixSubView"."CorrectHighlight");                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+-- UPDATE "MixSub"
+-- SET "HallucinatedHighlight" = NULL
+-- WHERE "PII" IN ('S019074092500180X',
+--                 'S0190740925001811');
+
+SELECT COUNT(*)
+FROM "MixSubView"
+WHERE LENGTH("CorrectHighlight") >= LENGTH("ArticleAbstract")
+    OR LENGTH("CorrectHighlight") < 95;
+
+
+SELECT *
+FROM "MixSubView"
+WHERE LENGTH("CorrectHighlight") < 90
+    AND LENGTH("CorrectHighlight") > 40;
 
 
 SELECT COUNT(*)
@@ -36,9 +80,11 @@ FROM "MixSubView"
 WHERE "HallucinatedHighlightEntities" IS NOT NULL
     AND "HallucinatedHighlightEntities" NOT IN ('[]',
                                                 '{}')
+    AND JSONB_ARRAY_LENGTH("HallucinatedHighlightEntities")>2
     AND "HallucinatedHighlightEntities" IS NOT NULL
     AND "CorrectHighlightEntities" NOT IN ('[]',
-                                           '{}');
+                                           '{}')
+    AND JSONB_ARRAY_LENGTH("CorrectHighlightEntities")>2;
 
 
 SELECT "PII",
@@ -75,7 +121,7 @@ WHERE "PII" IN ('S2666498425000146',
 
 SELECT *
 FROM "MixSub"
-WHERE "PII" = 'S2468312421000018';
+WHERE "PII" = 'S0045206820313626';
 
 
 INSERT INTO "MixSub" ("PII",
@@ -175,7 +221,7 @@ ALTER TABLE "MixSub" ADD COLUMN "Title" TEXT;
 
 SELECT *
 FROM "MixSub"
-LIMIT 10;
+where "PII" = 'S2212054823000413';
 
 
 SELECT COUNT(*) AS "TODO"
@@ -235,6 +281,15 @@ WHERE "PII" IN
              OR "CorrectHighlight" IS NULL
              OR LENGTH("CorrectHighlight") >= 800
              OR LENGTH("HallucinatedHighlight") >= 900);
+
+
+SELECT COUNT(*)
+FROM "MixSubView";
+
+
+SELECT *
+FROM "MixSubView"
+WHERE "PII" = 'S0303264720300836';
 
 
 SELECT "PII",

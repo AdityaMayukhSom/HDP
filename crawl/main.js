@@ -453,14 +453,13 @@ const main = async () => {
         const piiQuery = {
             name: "fetch-batched-piis",
             text: `
-            SELECT "PII",
-                    LENGTH("BetterHighlight")::DECIMAL/ LENGTH("OriginalHighlight") AS "RATIO"
+            SELECT "PII"
             FROM "MixSub"
-            WHERE ("BetterHighlight" IS NULL
-                    AND "OriginalHighlight" IS NULL)
-                OR (LENGTH("BetterHighlight") >= 1.1 * LENGTH("OriginalHighlight")
-                    AND "HallucinatedHighlightEntities" IS NULL)
-            ORDER BY "RATIO" DESC
+            WHERE LENGTH("OriginalAbstract") <= 600
+                AND "BetterAbstract" IS NULL
+                AND "IsProcessed" = FALSE
+            GROUP BY "PII"
+            ORDER BY LENGTH("OriginalAbstract") ASC
             LIMIT $1
             `,
             values: [batchSize],
@@ -476,7 +475,7 @@ const main = async () => {
             SET "Title" = $1,
                 "BetterAbstract" = $2,
                 "BetterHighlight" = $3,
-                "HallucinatedHighlightEntities" = '[]'
+                "IsProcessed" = TRUE
             WHERE "PII" = $4
             `,
         };
@@ -487,12 +486,11 @@ const main = async () => {
         const todoQuery = {
             name: "todo-abstract-highlight",
             text: `
-            SELECT COUNT(*) AS "TODO"
+            SELECT COUNT("PII") AS "TODO"
             FROM "MixSub"
-            WHERE ("BetterHighlight" IS NULL
-                    AND "OriginalHighlight" IS NULL)
-                OR (LENGTH("BetterHighlight") >= 1.1 * LENGTH("OriginalHighlight")
-                    AND "HallucinatedHighlightEntities" IS NULL)
+            WHERE LENGTH("OriginalAbstract") <= 600
+                AND "BetterAbstract" IS NULL
+                AND "IsProcessed" = FALSE;
             `,
         };
 

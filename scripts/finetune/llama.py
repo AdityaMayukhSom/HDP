@@ -10,7 +10,7 @@ from unsloth.chat_templates import train_on_responses_only  # isort: skip
 
 from huggingface_hub import login
 from peft import PeftModelForCausalLM
-from transformers import TrainingArguments
+from transformers import DataCollatorForSeq2Seq, TrainingArguments
 from transformers.models.llama import LlamaForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from trl import SFTTrainer
@@ -81,16 +81,12 @@ def main(argv: list[str]):
         dataset_num_proc=os.cpu_count(),
         compute_metrics=lambda preds: compute_metrics(preds, tokenizer),
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-        # data_collator=DataCollatorForSeq2Seq(
-        #     tokenizer=tokenizer,
-        #     model=model,
-        # ),
+        data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer),
         args=TrainingArguments(
             per_device_train_batch_size=6,
             per_device_eval_batch_size=6,
-            num_train_epochs=int(
-                config["MODEL_EPOCHS"]
-            ),  # Set this to 1 for one full training run
+            # Set this to 1 for one full training run
+            num_train_epochs=int(config["MODEL_EPOCHS"]),
             warmup_steps=256,
             eval_strategy="epoch",
             save_strategy="steps",
@@ -101,7 +97,7 @@ def main(argv: list[str]):
             optim="adamw_8bit",
             weight_decay=0.01,
             lr_scheduler_type="linear",
-            report_to=["codecarbon", "tensorboard"],
+            report_to=["codecarbon", "tensorboard", "wandb"],
             output_dir=config["MODEL_OUTPUT_DIR"],
             logging_dir=config["MODEL_LOGGING_DIR"],
             logging_steps=1,
@@ -113,7 +109,7 @@ def main(argv: list[str]):
 
     trainer = train_on_responses_only(
         trainer,
-        instruction_part="<|start_header_id|>user<|end_header_id|>\n\n",
+        instruction_part="<|start_header_id|>system<|end_header_id|>\n\n",
         response_part="<|start_header_id|>assistant<|end_header_id|>\n\n",
         num_proc=os.cpu_count(),
     )

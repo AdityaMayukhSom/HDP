@@ -1,4 +1,5 @@
 import torch
+
 from transformers import LlamaForCausalLM, PreTrainedTokenizerFast  # isort:skip
 from unsloth import FastLanguageModel, is_bfloat16_supported
 
@@ -73,3 +74,7 @@ def generate_highlight(
     del term_identifier
 
     return output[0]
+
+
+def main():
+    pass

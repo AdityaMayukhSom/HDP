@@ -35,9 +35,9 @@ def load_mix_sub_into_database(engine: sa.Engine):
     tst_ds = tst_ds.map(lambda _: {"Split": "TEST"})
 
     with engine.connect() as conn:
-        trn_ds.to_sql("MixSub", conn, if_exists="append")
-        val_ds.to_sql("MixSub", conn, if_exists="append")
-        tst_ds.to_sql("MixSub", conn, if_exists="append")
+        trn_ds.to_sql("MixSubV1", conn, if_exists="append")
+        val_ds.to_sql("MixSubV1", conn, if_exists="append")
+        tst_ds.to_sql("MixSubV1", conn, if_exists="append")
 
 
 def extract_broken_abstracts(engine: sa.Engine):
